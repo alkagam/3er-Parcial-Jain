@@ -1,4 +1,5 @@
-// src/api.js
+
+// src/Api.js
 import axios from 'axios';
 
 // La URL base de tu backend Node.js (asegúrate que coincida con el puerto de tu servidor)
