@@ -1,0 +1,586 @@
+-- #############################################################################
+-- #                        SCRIPTS DE CREACIÓN DE BASE DE DATOS               #
+-- #                        TIENDA LA MODERNA - FASE 1                         #
+-- #                        SGBD: ORACLE DATABASE 20c                          #
+-- #############################################################################
+
+-- =============================================================================
+-- 1. CREACIÓN DEL USUARIO (ESQUEMA) Y ASIGNACIÓN DE PERMISOS
+--    Ejecutar con un usuario con privilegios (ej. SYS o SYSTEM)
+-- =============================================================================
+
+-- Eliminar el usuario si ya existe (para pruebas o re-creación)
+-- DROP USER TIENDAMODERNA CASCADE;
+
+-- Crear un nuevo usuario para la aplicación
+CREATE USER TIENDAMODERNA IDENTIFIED BY tu_password_segura
+DEFAULT TABLESPACE USERS
+TEMPORARY TABLESPACE TEMP
+QUOTA UNLIMITED ON USERS;
+
+-- Otorgar permisos básicos al nuevo usuario
+GRANT CONNECT TO TIENDAMODERNA;
+GRANT RESOURCE TO TIENDAMODERNA;
+GRANT CREATE VIEW TO TIENDAMODERNA;
+GRANT CREATE PROCEDURE TO TIENDAMODERNA;
+GRANT CREATE TRIGGER TO TIENDAMODERNA;
+GRANT CREATE SEQUENCE TO TIENDAMODERNA;
+
+-- Otorgar permisos adicionales para ejecutar procedimientos y vistas (si fuesen por otro esquema)
+-- ALTER USER TIENDAMODERNA QUOTA UNLIMITED ON USERS;
+
+
+-- #############################################################################
+-- # A partir de aquí, conectarse como el usuario TIENDAMODERNA para ejecutar #
+-- # el resto de los scripts.                                                  #
+-- #############################################################################
+
+
+-- =============================================================================
+-- 2. CREACIÓN DE SECUENCIAS PARA AUTO-INCREMENTO DE IDs
+--    Estas secuencias se usarán para generar valores únicos para las claves primarias
+-- =============================================================================
+CREATE SEQUENCE SEQ_PRODUCTOS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SEQ_CLIENTES START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SEQ_PROVEEDORES START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SEQ_VENTAS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SEQ_DETALLE_VENTAS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SEQ_CUENTAS_EFECTIVO START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE SEQ_CORTES_CAJA START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+
+-- =============================================================================
+-- 3. CREACIÓN DE TABLAS
+--    Definición de las estructuras de las tablas con sus columnas, tipos de datos
+--    y restricciones NOT NULL.
+-- =============================================================================
+
+-- Tabla PRODUCTOS
+CREATE TABLE PRODUCTOS (
+    ID_PRODUCTO     NUMBER(10)      DEFAULT SEQ_PRODUCTOS.NEXTVAL PRIMARY KEY,
+    NOMBRE          VARCHAR2(100)   NOT NULL,
+    DESCRIPCION     VARCHAR2(500),
+    PRECIO          NUMBER(10, 2)   NOT NULL CHECK (PRECIO >= 0),
+    STOCK           NUMBER(10)      NOT NULL CHECK (STOCK >= 0),
+    FECHA_CADUCIDAD DATE,
+    ID_PROVEEDOR    NUMBER(10)      NOT NULL
+);
+
+-- Tabla CLIENTES
+CREATE TABLE CLIENTES (
+    ID_CLIENTE      NUMBER(10)      DEFAULT SEQ_CLIENTES.NEXTVAL PRIMARY KEY,
+    NOMBRE          VARCHAR2(100)   NOT NULL,
+    APELLIDO        VARCHAR2(100),
+    DIRECCION       VARCHAR2(255),
+    TELEFONO        VARCHAR2(20)
+);
+
+-- Tabla PROVEEDORES
+CREATE TABLE PROVEEDORES (
+    ID_PROVEEDOR    NUMBER(10)      DEFAULT SEQ_PROVEEDORES.NEXTVAL PRIMARY KEY,
+    NOMBRE          VARCHAR2(100)   NOT NULL,
+    TELEFONO        VARCHAR2(20),
+    CONTACTO        VARCHAR2(100)
+);
+
+-- Tabla VENTAS
+CREATE TABLE VENTAS (
+    ID_Venta        NUMBER(10)      DEFAULT SEQ_VENTAS.NEXTVAL PRIMARY KEY,
+    FECHA_VENTA     TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+    TOTAL_VENTA     NUMBER(10, 2)   NOT NULL CHECK (TOTAL_VENTA >= 0),
+    ID_CLIENTE      NUMBER(10)
+);
+
+-- Tabla DETALLE_VENTAS
+CREATE TABLE DETALLE_VENTAS (
+    ID_DETALLE      NUMBER(10)      DEFAULT SEQ_DETALLE_VENTAS.NEXTVAL PRIMARY KEY,
+    ID_VENTA        NUMBER(10)      NOT NULL,
+    ID_PRODUCTO     NUMBER(10)      NOT NULL,
+    CANTIDAD        NUMBER(10)      NOT NULL CHECK (CANTIDAD > 0),
+    PRECIO_UNITARIO NUMBER(10, 2)   NOT NULL CHECK (PRECIO_UNITARIO >= 0)
+);
+
+-- Tabla CUENTAS_EFECTIVO (Para el control exclusivo en efectivo)
+CREATE TABLE CUENTAS_EFECTIVO (
+    ID_CUENTA       NUMBER(10)      DEFAULT SEQ_CUENTAS_EFECTIVO.NEXTVAL PRIMARY KEY,
+    NOMBRE_CUENTA   VARCHAR2(100)   DEFAULT 'Caja Principal' NOT NULL UNIQUE,
+    MONTO_ACTUAL    NUMBER(10, 2)   DEFAULT 0 NOT NULL CHECK (MONTO_ACTUAL >= 0)
+);
+
+-- Tabla CORTES_CAJA (Para registrar los cortes de caja históricos)
+CREATE TABLE CORTES_CAJA (
+    ID_CORTE        NUMBER(10)      DEFAULT SEQ_CORTES_CAJA.NEXTVAL PRIMARY KEY,
+    FECHA_CORTE     TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+    MONTO_CORTE     NUMBER(10, 2)   NOT NULL,
+    VENTAS_REALIZADAS_DIA NUMBER(10) NOT NULL -- Número de ventas consolidadas en este corte
+);
+
+
+-- =============================================================================
+-- 4. DEFINICIÓN DE CLAVES FORÁNEAS (FOREIGN KEYS)
+-- =============================================================================
+
+ALTER TABLE PRODUCTOS
+ADD CONSTRAINT FK_PRODUCTOS_PROVEEDORES
+FOREIGN KEY (ID_PROVEEDOR) REFERENCES PROVEEDORES(ID_PROVEEDOR);
+
+ALTER TABLE VENTAS
+ADD CONSTRAINT FK_VENTAS_CLIENTES
+FOREIGN KEY (ID_CLIENTE) REFERENCES CLIENTES(ID_CLIENTE);
+
+ALTER TABLE DETALLE_VENTAS
+ADD CONSTRAINT FK_DETALLE_VENTAS_VENTAS
+FOREIGN KEY (ID_VENTA) REFERENCES VENTAS(ID_VENTA) ON DELETE CASCADE; -- Si se borra una venta, sus detalles se borran
+
+ALTER TABLE DETALLE_VENTAS
+ADD CONSTRAINT FK_DETALLE_VENTAS_PRODUCTOS
+FOREIGN KEY (ID_PRODUCTO) REFERENCES PRODUCTOS(ID_PRODUCTO);
+
+
+-- =============================================================================
+-- 5. PROCEDIMIENTOS ALMACENADOS (PL/SQL)
+-- =============================================================================
+
+-- Procedimiento para gestionar Productos (CRUD: Create, Read, Update, Delete)
+CREATE OR REPLACE PROCEDURE SP_GestionarProducto (
+    p_operacion     VARCHAR2,   -- 'INSERT', 'UPDATE', 'DELETE', 'SELECT_ONE', 'SELECT_ALL'
+    p_id_producto   NUMBER      DEFAULT NULL,
+    p_nombre        VARCHAR2    DEFAULT NULL,
+    p_descripcion   VARCHAR2    DEFAULT NULL,
+    p_precio        NUMBER      DEFAULT NULL,
+    p_stock         NUMBER      DEFAULT NULL,
+    p_fecha_caducidad DATE      DEFAULT NULL,
+    p_id_proveedor  NUMBER      DEFAULT NULL,
+    -- Parámetros de salida para SELECT_ONE (solo si el frontend no los obtiene por sí solo)
+    o_nombre        OUT VARCHAR2,
+    o_descripcion   OUT VARCHAR2,
+    o_precio        OUT NUMBER,
+    o_stock         OUT NUMBER,
+    o_fecha_caducidad OUT DATE,
+    o_id_proveedor  OUT NUMBER
+)
+AS
+BEGIN
+    IF p_operacion = 'INSERT' THEN
+        INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR)
+        VALUES (p_nombre, p_descripcion, p_precio, p_stock, p_fecha_caducidad, p_id_proveedor);
+    ELSIF p_operacion = 'UPDATE' THEN
+        UPDATE PRODUCTOS
+        SET
+            NOMBRE = NVL(p_nombre, NOMBRE),
+            DESCRIPCION = NVL(p_descripcion, DESCRIPCION),
+            PRECIO = NVL(p_precio, PRECIO),
+            STOCK = NVL(p_stock, STOCK),
+            FECHA_CADUCIDAD = NVL(p_fecha_caducidad, FECHA_CADUCIDAD),
+            ID_PROVEEDOR = NVL(p_id_proveedor, ID_PROVEEDOR)
+        WHERE ID_PRODUCTO = p_id_producto;
+    ELSIF p_operacion = 'DELETE' THEN
+        DELETE FROM PRODUCTOS WHERE ID_PRODUCTO = p_id_producto;
+    ELSIF p_operacion = 'SELECT_ONE' THEN
+        SELECT NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR
+        INTO o_nombre, o_descripcion, o_precio, o_stock, o_fecha_caducidad, o_id_proveedor
+        FROM PRODUCTOS
+        WHERE ID_PRODUCTO = p_id_producto;
+    END IF;
+    -- COMMIT; -- Generalmente se hace COMMIT desde la aplicación para manejar transacciones más grandes
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Producto no encontrado.');
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20000, 'Error en SP_GestionarProducto: ' || SQLERRM);
+END;
+/
+
+-- Procedimiento para gestionar Clientes (CRUD)
+CREATE OR REPLACE PROCEDURE SP_GestionarCliente (
+    p_operacion     VARCHAR2,   -- 'INSERT', 'UPDATE', 'DELETE', 'SELECT_ONE'
+    p_id_cliente    NUMBER      DEFAULT NULL,
+    p_nombre        VARCHAR2    DEFAULT NULL,
+    p_apellido      VARCHAR2    DEFAULT NULL,
+    p_direccion     VARCHAR2    DEFAULT NULL,
+    p_telefono      VARCHAR2    DEFAULT NULL,
+    o_nombre        OUT VARCHAR2,
+    o_apellido      OUT VARCHAR2,
+    o_direccion     OUT VARCHAR2,
+    o_telefono      OUT VARCHAR2
+)
+AS
+BEGIN
+    IF p_operacion = 'INSERT' THEN
+        INSERT INTO CLIENTES (NOMBRE, APELLIDO, DIRECCION, TELEFONO)
+        VALUES (p_nombre, p_apellido, p_direccion, p_telefono);
+    ELSIF p_operacion = 'UPDATE' THEN
+        UPDATE CLIENTES
+        SET
+            NOMBRE = NVL(p_nombre, NOMBRE),
+            APELLIDO = NVL(p_apellido, APELLIDO),
+            DIRECCION = NVL(p_direccion, DIRECCION),
+            TELEFONO = NVL(p_telefono, TELEFONO)
+        WHERE ID_CLIENTE = p_id_cliente;
+    ELSIF p_operacion = 'DELETE' THEN
+        DELETE FROM CLIENTES WHERE ID_CLIENTE = p_id_cliente;
+    ELSIF p_operacion = 'SELECT_ONE' THEN
+        SELECT NOMBRE, APELLIDO, DIRECCION, TELEFONO
+        INTO o_nombre, o_apellido, o_direccion, o_telefono
+        FROM CLIENTES
+        WHERE ID_CLIENTE = p_id_cliente;
+    END IF;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Cliente no encontrado.');
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20000, 'Error en SP_GestionarCliente: ' || SQLERRM);
+END;
+/
+
+-- Procedimiento para gestionar Proveedores (CRUD)
+CREATE OR REPLACE PROCEDURE SP_GestionarProveedor (
+    p_operacion     VARCHAR2,   -- 'INSERT', 'UPDATE', 'DELETE', 'SELECT_ONE'
+    p_id_proveedor  NUMBER      DEFAULT NULL,
+    p_nombre        VARCHAR2    DEFAULT NULL,
+    p_telefono      VARCHAR2    DEFAULT NULL,
+    p_contacto      VARCHAR2    DEFAULT NULL,
+    o_nombre        OUT VARCHAR2,
+    o_telefono      OUT VARCHAR2,
+    o_contacto      OUT VARCHAR2
+)
+AS
+BEGIN
+    IF p_operacion = 'INSERT' THEN
+        INSERT INTO PROVEEDORES (NOMBRE, TELEFONO, CONTACTO)
+        VALUES (p_nombre, p_telefono, p_contacto);
+    ELSIF p_operacion = 'UPDATE' THEN
+        UPDATE PROVEEDORES
+        SET
+            NOMBRE = NVL(p_nombre, NOMBRE),
+            TELEFONO = NVL(p_telefono, TELEFONO),
+            CONTACTO = NVL(p_contacto, CONTACTO)
+        WHERE ID_PROVEEDOR = p_id_proveedor;
+    ELSIF p_operacion = 'DELETE' THEN
+        DELETE FROM PROVEEDORES WHERE ID_PROVEEDOR = p_id_proveedor;
+    ELSIF p_operacion = 'SELECT_ONE' THEN
+        SELECT NOMBRE, TELEFONO, CONTACTO
+        INTO o_nombre, o_telefono, o_contacto
+        FROM PROVEEDORES
+        WHERE ID_PROVEEDOR = p_id_proveedor;
+    END IF;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20003, 'Proveedor no encontrado.');
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20000, 'Error en SP_GestionarProveedor: ' || SQLERRM);
+END;
+/
+
+-- Tipo de objeto para los ítems de venta (necesario para pasar un array de objetos)
+-- Esto permite pasar una estructura más compleja al procedimiento SP_RealizarVenta
+CREATE OR REPLACE TYPE T_REC_ITEM_VENTA AS OBJECT (
+    id_producto NUMBER,
+    cantidad NUMBER,
+    precio_unitario NUMBER
+);
+/
+
+CREATE OR REPLACE TYPE T_TAB_ITEMS_VENTA AS TABLE OF T_REC_ITEM_VENTA;
+/
+
+-- Procedimiento SP_RealizarVenta
+-- p_items_venta se espera como un CLOB que contiene un JSON array
+-- Ejemplo de p_items_venta: '[{"id_producto":1, "cantidad":2, "precio_unitario":10.50}, {"id_producto":2, "cantidad":1, "precio_unitario":25.00}]'
+CREATE OR REPLACE PROCEDURE SP_RealizarVenta (
+    p_id_cliente        NUMBER,
+    p_items_venta_json  CLOB
+)
+AS
+    v_total_venta       NUMBER(10, 2) := 0;
+    v_id_venta          NUMBER(10);
+    v_json_array        JSON_ARRAY_T;
+    v_json_object       JSON_OBJECT_T;
+    v_id_producto       NUMBER;
+    v_cantidad          NUMBER;
+    v_precio_unitario   NUMBER;
+    v_stock_actual      NUMBER;
+BEGIN
+    -- Crear una nueva venta
+    INSERT INTO VENTAS (ID_CLIENTE, TOTAL_VENTA)
+    VALUES (p_id_cliente, 0) -- Se actualizará el total al final
+    RETURNING ID_VENTA INTO v_id_venta;
+
+    -- Parsear el CLOB JSON
+    v_json_array := JSON_ARRAY_T.parse(p_items_venta_json);
+
+    -- Iterar sobre los ítems de la venta
+    FOR i IN 0 .. v_json_array.get_size - 1 LOOP
+        v_json_object := TREAT(v_json_array.get(i) AS JSON_OBJECT_T);
+
+        v_id_producto := v_json_object.get_number('id_producto');
+        v_cantidad := v_json_object.get_number('cantidad');
+        v_precio_unitario := v_json_object.get_number('precio_unitario');
+
+        -- Obtener stock actual del producto
+        SELECT STOCK INTO v_stock_actual FROM PRODUCTOS WHERE ID_PRODUCTO = v_id_producto FOR UPDATE; -- Bloquear fila
+
+        -- Validar stock antes de insertar detalle
+        IF v_stock_actual < v_cantidad THEN
+            RAISE_APPLICATION_ERROR(-20004, 'Stock insuficiente para el producto ID: ' || v_id_producto || '. Stock actual: ' || v_stock_actual || ', Cantidad solicitada: ' || v_cantidad);
+        END IF;
+
+        -- Insertar en DETALLE_VENTAS
+        INSERT INTO DETALLE_VENTAS (ID_VENTA, ID_PRODUCTO, CANTIDAD, PRECIO_UNITARIO)
+        VALUES (v_id_venta, v_id_producto, v_cantidad, v_precio_unitario);
+
+        -- Actualizar el stock del producto
+        UPDATE PRODUCTOS
+        SET STOCK = STOCK - v_cantidad
+        WHERE ID_PRODUCTO = v_id_producto;
+
+        -- Sumar al total de la venta
+        v_total_venta := v_total_venta + (v_cantidad * v_precio_unitario);
+    END LOOP;
+
+    -- Actualizar el total de la venta
+    UPDATE VENTAS
+    SET TOTAL_VENTA = v_total_venta
+    WHERE ID_VENTA = v_id_venta;
+
+    COMMIT; -- Confirmar la transacción completa
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK; -- Deshacer todo en caso de error
+        RAISE_APPLICATION_ERROR(-20000, 'Error en SP_RealizarVenta: ' || SQLERRM);
+END;
+/
+
+-- Procedimiento SP_CorteCajaDiario
+-- Realiza el corte de caja para las ventas del día actual y actualiza la cuenta de efectivo.
+CREATE OR REPLACE PROCEDURE SP_CorteCajaDiario
+AS
+    v_total_ventas_dia  NUMBER(10, 2) := 0;
+    v_num_ventas_dia    NUMBER(10) := 0;
+BEGIN
+    -- Calcular el total de ventas del día actual
+    SELECT NVL(SUM(TOTAL_VENTA), 0), COUNT(ID_VENTA)
+    INTO v_total_ventas_dia, v_num_ventas_dia
+    FROM VENTAS
+    WHERE TRUNC(FECHA_VENTA) = TRUNC(SYSTIMESTAMP);
+
+    -- Actualizar el monto en la cuenta de efectivo (asume ID_CUENTA = 1 para la caja principal)
+    -- Si no existe la cuenta, la inserta. Si existe, la actualiza.
+    MERGE INTO CUENTAS_EFECTIVO ce
+    USING (SELECT 1 AS id_cuenta_ref FROM DUAL) src
+    ON (ce.ID_CUENTA = src.id_cuenta_ref)
+    WHEN MATCHED THEN
+        UPDATE SET MONTO_ACTUAL = ce.MONTO_ACTUAL + v_total_ventas_dia
+    WHEN NOT MATCHED THEN
+        INSERT (ID_CUENTA, NOMBRE_CUENTA, MONTO_ACTUAL)
+        VALUES (SEQ_CUENTAS_EFECTIVO.NEXTVAL, 'Caja Principal', v_total_ventas_dia);
+
+    -- Registrar el corte de caja en la tabla CORTES_CAJA
+    INSERT INTO CORTES_CAJA (MONTO_CORTE, VENTAS_REALIZADAS_DIA)
+    VALUES (v_total_ventas_dia, v_num_ventas_dia);
+
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20000, 'Error en SP_CorteCajaDiario: ' || SQLERRM);
+END;
+/
+
+-- Procedimiento SP_GenerarReporteVentasSemanal
+-- Este procedimiento no devuelve un cursor directamente para una API REST,
+-- sino que se usaría para generar un reporte que la aplicación podría luego consultar
+-- O bien, para devolver los datos en una estructura JSON/CLOB.
+-- Para simplicidad en este ejemplo, se podría considerar una VIEW o una consulta directa desde Node.js
+-- Si se requiere un procedimiento, podría ser:
+
+CREATE OR REPLACE PROCEDURE SP_GenerarReporteVentasSemanal (
+    o_reporte_json OUT CLOB
+)
+AS
+    v_json_reporte JSON_OBJECT_T;
+    v_ventas_semana SYS_REFCURSOR;
+    v_total_semana NUMBER := 0;
+    v_num_ventas_semana NUMBER := 0;
+BEGIN
+    OPEN v_ventas_semana FOR
+        SELECT TRUNC(FECHA_VENTA) AS FECHA, SUM(TOTAL_VENTA) AS TOTAL_DIA, COUNT(ID_VENTA) AS NUM_VENTAS_DIA
+        FROM VENTAS
+        WHERE FECHA_VENTA >= TRUNC(SYSDATE - 7) AND FECHA_VENTA < TRUNC(SYSDATE)
+        GROUP BY TRUNC(FECHA_VENTA)
+        ORDER BY FECHA ASC;
+
+    -- Construir el JSON de salida (ejemplo simplificado)
+    v_json_reporte := JSON_OBJECT_T(); -- CORRECCIÓN: Inicializar con el constructor JSON_OBJECT_T()
+    v_json_reporte.put('rango_fecha', 'Últimos 7 días');
+    
+    -- Recorrer el cursor y agregar al JSON
+    -- Esta parte es más compleja para construir JSON de forma dinámica en PL/SQL
+    -- Normalmente, para reportes, es más eficiente dejar que la aplicación (Node.js)
+    -- haga la consulta y construya el JSON.
+    -- Aquí solo se calcula el total general y el número de ventas
+    SELECT NVL(SUM(TOTAL_VENTA), 0), COUNT(ID_Venta)
+    INTO v_total_semana, v_num_ventas_semana
+    FROM VENTAS
+    WHERE FECHA_VENTA >= TRUNC(SYSDATE - 7) AND FECHA_VENTA < TRUNC(SYSDATE);
+
+    v_json_reporte.put('total_semanal', v_total_semana);
+    v_json_reporte.put('numero_ventas_semanal', v_num_ventas_semana);
+
+    o_reporte_json := v_json_reporte.to_clob;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20000, 'Error en SP_GenerarReporteVentasSemanal: ' || SQLERRM);
+END;
+/
+
+
+-- =============================================================================
+-- 6. DISPARADORES (TRIGGERS PL/SQL)
+-- =============================================================================
+
+-- Disparador para validar el stock antes de insertar en DETALLE_VENTAS
+-- y actualizar el stock del producto
+CREATE OR REPLACE TRIGGER TRG_Actualizar_Stock_Detalle
+BEFORE INSERT ON DETALLE_VENTAS
+FOR EACH ROW
+DECLARE
+    v_current_stock NUMBER;
+BEGIN
+    -- Obtener el stock actual del producto (asegurando el bloqueo para concurrencia)
+    SELECT STOCK INTO v_current_stock
+    FROM PRODUCTOS
+    WHERE ID_PRODUCTO = :NEW.ID_PRODUCTO FOR UPDATE OF STOCK;
+
+    -- Validar si hay suficiente stock
+    IF v_current_stock < :NEW.CANTIDAD THEN
+        RAISE_APPLICATION_ERROR(-20005, 'Stock insuficiente para el producto ID: ' || :NEW.ID_PRODUCTO || '. Stock disponible: ' || v_current_stock);
+    END IF;
+
+    -- Si hay suficiente stock, decrementar directamente el stock del producto
+    UPDATE PRODUCTOS
+    SET STOCK = STOCK - :NEW.CANTIDAD
+    WHERE ID_PRODUCTO = :NEW.ID_PRODUCTO;
+END;
+/
+
+-- Opcional: Si SP_RealizarVenta ya maneja el stock, este trigger se podría omitir
+-- o modificarse para solo validar. El SP_RealizarVenta actual ya maneja la disminución.
+-- Sin embargo, es buena práctica tener un trigger para validación a nivel de DB.
+
+
+-- =============================================================================
+-- 7. VISTAS (SQL)
+-- =============================================================================
+
+-- Vista para productos con menos de 5 unidades en stock
+CREATE OR REPLACE VIEW V_PRODUCTOS_BAJO_STOCK AS
+SELECT
+    P.ID_PRODUCTO,
+    P.NOMBRE, -- CORRECCIÓN: Se especificó P.NOMBRE para evitar ambigüedad
+    P.DESCRIPCION,
+    P.PRECIO,
+    P.STOCK,
+    P.FECHA_CADUCIDAD,
+    P.ID_PROVEEDOR,
+    PR.NOMBRE AS NOMBRE_PROVEEDOR
+FROM
+    PRODUCTOS P
+JOIN
+    PROVEEDORES PR ON P.ID_PROVEEDOR = PR.ID_PROVEEDOR
+WHERE
+    STOCK < 5
+ORDER BY
+    STOCK ASC;
+
+
+-- Vista para productos a menos de una semana de caducar
+CREATE OR REPLACE VIEW V_PRODUCTOS_POR_CADUCAR AS
+SELECT
+    ID_PRODUCTO,
+    NOMBRE,
+    DESCRIPCION,
+    PRECIO,
+    STOCK,
+    FECHA_CADUCIDAD,
+    P.ID_PROVEEDOR,
+    PR.NOMBRE AS NOMBRE_PROVEEDOR
+FROM
+    PRODUCTOS P
+JOIN
+    PROVEEDORES PR ON P.ID_PROVEEDOR = PR.ID_PROVEEDOR
+WHERE
+    FECHA_CADUCIDAD IS NOT NULL AND FECHA_CADUCIDAD BETWEEN SYSDATE AND SYSDATE + 7
+ORDER BY
+    FECHA_CADUCIDAD ASC;
+
+
+-- Vista para productos a menos de una semana de caducar
+CREATE OR REPLACE VIEW V_PRODUCTOS_POR_CADUCAR AS
+SELECT
+    P.ID_PRODUCTO,
+    P.NOMBRE, -- CORRECCIÓN: Se especificó P.NOMBRE para evitar ambigüedad
+    P.DESCRIPCION,
+    P.PRECIO,
+    P.STOCK,
+    P.FECHA_CADUCIDAD,
+    P.ID_PROVEEDOR,
+    PR.NOMBRE AS NOMBRE_PROVEEDOR
+FROM
+    PRODUCTOS P
+JOIN
+    PROVEEDORES PR ON P.ID_PROVEEDOR = PR.ID_PROVEEDOR
+WHERE
+    FECHA_CADUCIDAD IS NOT NULL AND FECHA_CADUCIDAD BETWEEN SYSDATE AND SYSDATE + 7
+ORDER BY
+    FECHA_CADUCIDAD ASC;
+
+
+CREATE OR REPLACE VIEW V_RESUMEN_VENTAS_DIARIAS AS
+SELECT
+    TRUNC(FECHA_VENTA) AS FECHA_DEL_DIA,
+    SUM(TOTAL_VENTA) AS TOTAL_VENTAS_DIA,
+    COUNT(ID_VENTA) AS NUMERO_VENTAS_DIA
+FROM
+    VENTAS
+GROUP BY
+    TRUNC(FECHA_VENTA)
+ORDER BY
+    FECHA_DEL_DIA DESC;
+
+
+-- =============================================================================
+-- 8. CONSULTAS ESPECÍFICAS (Ejemplos, el backend las construirá dinámicamente)
+-- =============================================================================
+
+-- Consulta para corte de caja por un día específico (ejemplo para el backend)
+-- SELECT SUM(TOTAL_VENTA) AS TOTAL_DIA_ESPECIFICO FROM V_RESUMEN_VENTAS_DIARIAS WHERE FECHA_DEL_DIA = TO_DATE('2024-06-14', 'YYYY-MM-DD');
+
+-- Consulta para corte de caja por un intervalo abierto de tiempo (ejemplo para el backend)
+-- SELECT SUM(TOTAL_VENTA) AS TOTAL_INTERVALO FROM VENTAS WHERE FECHA_VENTA BETWEEN TO_TIMESTAMP('2024-06-01 00:00:00', 'YYYY-MM-DD HH24:MI:SS') AND TO_TIMESTAMP('2024-06-14 23:59:59', 'YYYY-MM-DD HH24:MI:SS');
+
+
+-- =============================================================================
+-- 9. INSERCIÓN DE DATOS DE PRUEBA (OPCIONAL)
+--    Para poblar la base de datos y facilitar las pruebas
+-- =============================================================================
+
+INSERT INTO PROVEEDORES (NOMBRE, TELEFONO, CONTACTO) VALUES ('Proveedor Abarrotes', '5512345678', 'Juan Pérez');
+INSERT INTO PROVEEDORES (NOMBRE, TELEFONO, CONTACTO) VALUES ('Proveedor Lácteos', '5587654321', 'María López');
+COMMIT;
+
+INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR) VALUES ('Leche Entera', 'Leche pasteurizada 1L', 25.00, 10, SYSDATE + 10, 2);
+INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR) VALUES ('Arroz Grano Fino', 'Arroz blanco 1kg', 30.50, 4, SYSDATE + 180, 1);
+INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR) VALUES ('Aceite Vegetal', 'Botella de aceite 900ml', 45.00, 20, SYSDATE + 300, 1);
+INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR) VALUES ('Yogurt Fresa', 'Yogurt batido 150gr', 12.00, 3, SYSDATE + 4, 2); -- Este estará bajo stock y por caducar
+INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO, STOCK, FECHA_CADUCIDAD, ID_PROVEEDOR) VALUES ('Pan de Caja', 'Pan blanco 600gr', 35.00, 7, SYSDATE + 3, 1); -- Este estará por caducar
+COMMIT;
+
+INSERT INTO CLIENTES (NOMBRE, APELLIDO, DIRECCION, TELEFONO) VALUES ('Ana', 'García', 'Calle Falsa 123', '5511223344');
+INSERT INTO CLIENTES (NOMBRE, APELLIDO, DIRECCION, TELEFONO) VALUES ('Luis', 'Martínez', 'Avenida Siempre Viva 45', '5599887766');
+COMMIT;
+
+-- Inicializar la cuenta de efectivo (solo una vez)
+INSERT INTO CUENTAS_EFECTIVO (NOMBRE_CUENTA, MONTO_ACTUAL) VALUES ('Caja Principal', 0);
+COMMIT;
