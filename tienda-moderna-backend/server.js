@@ -100,7 +100,7 @@ app.get('/api/products/bajo-stock', async (req, res) => {
                 PR.NOMBRE_PROVEEDOR
              FROM PRODUCTOS P
              JOIN PROVEEDORES PR ON P.ID_PROVEEDOR = PR.ID_PROVEEDOR
-             WHERE P.STOCK_ACTUAL <= P.STOCK_MINIMO AND P.ACTIVO = 1
+             WHERE P.STOCK_ACTUAL <= 5 AND P.ACTIVO = 1 -- ¡CAMBIO AQUÍ! De P.STOCK_MINIMO a 5
              ORDER BY P.STOCK_ACTUAL ASC`,
             [],
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -121,7 +121,6 @@ app.get('/api/products/bajo-stock', async (req, res) => {
         }
     }
 });
-
 // ===========================================
 // NUEVO ENDPOINT: Obtener productos por caducar
 // GET /api/products/por-caducar - DEVUELVE PROPIEDADES EN MAYÚSCULAS + ALIAS STOCK
