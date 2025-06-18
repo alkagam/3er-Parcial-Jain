@@ -1,9 +1,8 @@
-
 // src/Api.js
 import axios from 'axios';
 
 // La URL base de tu backend Node.js (asegúrate que coincida con el puerto de tu servidor)
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5000'; // Solo la base, sin el '/api'
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -12,26 +11,32 @@ const api = axios.create({
     },
 });
 
-export const getProducts = () => api.get('/productos');
-export const getLowStockProducts = () => api.get('/productos/bajo-stock');
-export const getExpiringProducts = () => api.get('/productos/por-caducar');
-export const addProduct = (productData) => api.post('/productos', productData);
-export const updateProduct = (id, productData) => api.put(`/productos/${id}`, productData);
-export const deleteProduct = (id) => api.delete(`/productos/${id}`);
+// === ENDPOINTS DE PRODUCTOS ===
+export const getProducts = () => api.get('/api/products'); 
+export const getLowStockProducts = () => api.get('/api/products/bajo-stock'); 
+export const getExpiringProducts = () => api.get('/api/products/por-caducar'); 
+export const addProduct = (productData) => api.post('/api/products', productData); 
+export const updateProduct = (id, productData) => api.put(`/api/products/${id}`, productData); 
+export const deleteProduct = (id) => api.delete(`/api/products/${id}`); 
 
-export const registerSale = (saleData) => api.post('/ventas', saleData);
-export const getSales = () => api.get('/ventas');
+// === ENDPOINTS DE VENTAS ===
+export const registerSale = (saleData) => api.post('/api/sales/process', saleData); 
+export const getSales = () => api.get('/api/sales'); 
 
-export const conductDailyCashClose = () => api.post('/reportes/corte-caja/diario');
-export const getCashCloseByInterval = (fechaInicio, fechaFin) => api.get(`/reportes/corte-caja/intervalo?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
-export const getWeeklySalesReports = () => api.get('/reportes/ventas/semanal');
+// === ENDPOINTS DE REPORTES ===
+// Asegúrate de que estos coincidan con tus rutas del backend si las tienes definidas
+export const conductDailyCashClose = () => api.post('/api/reportes/corte-caja/diario'); 
+export const getCashCloseByInterval = (fechaInicio, fechaFin) => api.get(`/api/reportes/corte-caja/intervalo?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`); 
+export const getWeeklySalesReports = () => api.get('/api/reportes/ventas/semanal'); 
 
-export const getClients = () => api.get('/clientes');
-export const addClient = (clientData) => api.post('/clientes', clientData);
-// Puedes añadir updateClient, deleteClient siguiendo el patrón
+// === ENDPOINTS DE CLIENTES ===
+// Si tu backend usa '/api/clients', déjalo así. Si usa '/api/clientes', cámbialo.
+export const getClients = () => api.get('/api/clients'); 
+export const addClient = (clientData) => api.post('/api/clients', clientData);
 
-export const getProviders = () => api.get('/proveedores');
-export const addProvider = (providerData) => api.post('/proveedores', providerData);
-// Puedes añadir updateProvider, deleteProvider siguiendo el patrón
+// === ENDPOINTS DE PROVEEDORES ===
+// Si tu backend usa '/api/providers', déjalo así. Si usa '/api/proveedores', cámbialo.
+export const getProviders = () => api.get('/api/providers'); 
+export const addProvider = (providerData) => api.post('/api/providers', providerData);
 
 export default api;

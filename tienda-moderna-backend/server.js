@@ -8,29 +8,22 @@ const cors = require('cors');
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 5000; // Puerto donde correrá el backend
+const port = process.env.PORT || 5000;
 
 // =========================================================================
 // !!! IMPORTANTE: CONFIGURACIÓN DE ORACLE INSTANT CLIENT !!!
-// DESCOMENTA la siguiente línea y AJUSTA la ruta a tu directorio
-// de instalación de Oracle Instant Client. Esto es CRÍTICO para la conexión.
+// Descomenta y AJUSTA esta línea a tu ruta real de Instant Client.
 // =========================================================================
-oracledb.initOracleClient({ libDir: 'C:\\Users\\saulm\\Documents\\Oracle\\instantclient_23_8' }); // <-- ¡Verifica que esta ruta sea la tuya!
+oracledb.initOracleClient({ libDir: 'C:\\Users\\saulm\\Documents\\Oracle\\instantclient_23_8' }); // <<-- ¡TU RUTA AQUÍ!
 
 // Middleware
-app.use(cors()); // Permite que tu frontend de React (en otro puerto) acceda a esta API
-app.use(express.json()); // Permite a Express leer el cuerpo de las peticiones JSON
+app.use(cors());
+app.use(express.json());
 
 // Configuración de la conexión a Oracle
 const dbConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    // =========================================================================
-    // !!! IMPORTANTE: CADENA DE CONEXIÓN A LA BASE DE DATOS !!!
-    // Asegúrate de que esta cadena sea EXACTA para tu PDB (XEPDB1).
-    // El formato recomendado es 'host:port/service_name'.
-    // Por ejemplo: 'localhost:1521/XEPDB1'
-    // =========================================================================
     connectString: process.env.DB_CONNECT_STRING
 };
 
@@ -41,7 +34,7 @@ async function getConnection() {
         return await oracledb.getConnection(dbConfig);
     } catch (err) {
         console.error('Error al obtener conexión a la base de datos:', err.message);
-        throw err; // Vuelve a lanzar el error para que sea capturado por el bloque catch superior
+        throw err;
     }
 }
 
@@ -53,8 +46,6 @@ app.get('/api/products', async (req, res) => {
     let connection;
     try {
         connection = await getConnection();
-        // Asegúrate de que las columnas de tu tabla PRODUCTOS coincidan con estos nombres
-        // o usa AS para renombrarlas si son diferentes (ej. STOCK_ACTUAL AS stock)
         const result = await connection.execute(
             `SELECT
                 ID_PRODUCTO AS id,
@@ -67,8 +58,8 @@ app.get('/api/products', async (req, res) => {
                 ID_PROVEEDOR AS supplierId,
                 IMAGEN_URL AS imageUrl
              FROM PRODUCTOS`,
-            [], // No hay parámetros de binding
-            { outFormat: oracledb.OUT_FORMAT_OBJECT } // Formatea los resultados como objetos JavaScript
+            [],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         console.log(`Productos obtenidos: ${result.rows.length} filas.`);
         res.json(result.rows);
@@ -88,11 +79,97 @@ app.get('/api/products', async (req, res) => {
 });
 
 // ===========================================
+// NUEVO ENDPOINT: Obtener productos con bajo stock
+// GET /api/products/bajo-stock
+// ===========================================
+app.get('/api/products/bajo-stock', async (req, res) => {
+    let connection;
+    try {
+        connection = await getConnection();
+        const result = await connection.execute(
+            `SELECT
+                ID_PRODUCTO AS id,
+                CODIGO_BARRAS AS barcode,
+                NOMBRE AS name,
+                DESCRIPCION AS description,
+                PRECIO_VENTA AS price,
+                STOCK_ACTUAL AS stock,
+                STOCK_MINIMO AS minStock,
+                IMAGEN_URL AS imageUrl
+             FROM PRODUCTOS
+             WHERE STOCK_ACTUAL <= STOCK_MINIMO AND ACTIVO = 1
+             ORDER BY STOCK_ACTUAL ASC`, // Ordena por stock más bajo primero
+            [],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        console.log(`Productos con bajo stock obtenidos: ${result.rows.length} filas.`);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error al obtener productos con bajo stock (endpoint):', err.message);
+        res.status(500).json({ message: 'Error interno del servidor al obtener productos con bajo stock.', error: err.message });
+    } finally {
+        if (connection) {
+            try {
+                await connection.close();
+                console.log('Conexión cerrada después de obtener productos con bajo stock.');
+            } catch (err) {
+                console.error('Error al cerrar la conexión de bajo stock:', err);
+            }
+        }
+    }
+});
+
+// ===========================================
+// NUEVO ENDPOINT: Obtener productos por caducar
+// GET /api/products/por-caducar
+// ===========================================
+app.get('/api/products/por-caducar', async (req, res) => {
+    let connection;
+    try {
+        connection = await getConnection();
+        // Productos que caducan en los próximos 30 días o ya caducaron y están activos
+        const result = await connection.execute(
+            `SELECT
+                ID_PRODUCTO AS id,
+                CODIGO_BARRAS AS barcode,
+                NOMBRE AS name,
+                DESCRIPCION AS description,
+                PRECIO_VENTA AS price,
+                STOCK_ACTUAL AS stock,
+                FECHA_CADUCIDAD AS expiryDate,
+                IMAGEN_URL AS imageUrl
+             FROM PRODUCTOS
+             WHERE FECHA_CADUCIDAD IS NOT NULL
+               AND FECHA_CADUCIDAD <= SYSDATE + INTERVAL '30' DAY -- Próximos 30 días o ya caducados
+               AND ACTIVO = 1
+             ORDER BY FECHA_CADUCIDAD ASC`, // Ordena por fecha de caducidad más cercana primero
+            [],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        console.log(`Productos por caducar obtenidos: ${result.rows.length} filas.`);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error al obtener productos por caducar (endpoint):', err.message);
+        res.status(500).json({ message: 'Error interno del servidor al obtener productos por caducar.', error: err.message });
+    } finally {
+        if (connection) {
+            try {
+                await connection.close();
+                console.log('Conexión cerrada después de obtener productos por caducar.');
+            } catch (err) {
+                console.error('Error al cerrar la conexión de productos por caducar:', err);
+            }
+        }
+    }
+});
+
+
+// ===========================================
 // ENDPOINT 2: Procesar una venta
 // POST /api/sales/process
 // ===========================================
 app.post('/api/sales/process', async (req, res) => {
-    const { cartItems, total } = req.body; // Recibe los ítems del carrito y el total del frontend
+    const { cartItems, total } = req.body;
     let connection;
 
     if (!cartItems || cartItems.length === 0) {
@@ -101,32 +178,26 @@ app.post('/api/sales/process', async (req, res) => {
 
     try {
         connection = await getConnection();
-        // INICIA LA TRANSACCIÓN
-        // Nivel de aislamiento para consistencia, SERIALIZABLE es el más estricto.
-        await connection.execute('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE');
-        console.log('Transacción de venta iniciada.');
+        // --- CAMBIO CLAVE AQUÍ: De SERIALIZABLE a READ COMMITTED ---
+        await connection.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+        console.log('Transacción de venta iniciada con nivel READ COMMITTED.');
 
-        // 1. Insertar en la tabla VENTAS
-        // Asumiendo que VENTAS tiene ID_VENTA (PK), FECHA_VENTA, TOTAL_VENTA, etc.
-        // Si usas una secuencia o un ID autoincremental en Oracle (IDENTITY column), ajústalo.
         const saleIdResult = await connection.execute(
             `INSERT INTO VENTAS (FECHA_VENTA, TOTAL_VENTA, ESTADO)
              VALUES (SYSDATE, :total, 'Completada')
              RETURNING ID_VENTA INTO :id_venta`,
             {
                 total: total,
-                id_venta: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT } // Para obtener el ID de venta generado
+                id_venta: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
             },
-            { autoCommit: false } // No hacer commit automáticamente hasta el final
+            { autoCommit: false }
         );
         const saleId = saleIdResult.outBinds.id_venta[0];
         console.log(`Venta principal registrada con ID: ${saleId}`);
 
-        // 2. Insertar en la tabla DETALLE_VENTAS y actualizar STOCK de PRODUCTOS
         for (const item of cartItems) {
-            const { productId, quantity, price } = item; // Asegúrate de que el frontend envíe 'productId' y 'price' directamente
+            const { productId, quantity, price } = item;
 
-            // a. Verificar stock antes de vender (optimista)
             const stockCheck = await connection.execute(
                 `SELECT STOCK_ACTUAL, NOMBRE FROM PRODUCTOS WHERE ID_PRODUCTO = :id`,
                 { id: productId },
@@ -143,21 +214,20 @@ app.post('/api/sales/process', async (req, res) => {
                 throw new Error(`Stock insuficiente para el producto "${productName}". Stock disponible: ${currentStock}, Solicitado: ${quantity}`);
             }
 
-            // b. Insertar detalle de venta
             await connection.execute(
-                `INSERT INTO DETALLE_VENTAS (ID_VENTA, ID_PRODUCTO, CANTIDAD, PRECIO_UNITARIO)
-                 VALUES (:saleId, :productId, :quantity, :price)`,
+                `INSERT INTO DETALLE_VENTAS (ID_VENTA, ID_PRODUCTO, CANTIDAD, PRECIO_UNITARIO, SUBTOTAL)
+                 VALUES (:saleId, :productId, :quantity, :price, :subtotal)`,
                 {
                     saleId: saleId,
                     productId: productId,
                     quantity: quantity,
-                    price: price
+                    price: price,
+                    subtotal: quantity * price
                 },
                 { autoCommit: false }
             );
             console.log(`Detalle de venta para producto ${productId} añadido.`);
 
-            // c. Actualizar stock del producto
             await connection.execute(
                 `UPDATE PRODUCTOS
                  SET STOCK_ACTUAL = STOCK_ACTUAL - :quantity
@@ -171,13 +241,11 @@ app.post('/api/sales/process', async (req, res) => {
             console.log(`Stock actualizado para producto ${productId}.`);
         }
 
-        // Si todo va bien, HAZ COMMIT de la transacción
         await connection.commit();
         console.log('Transacción de venta completada y commit realizado.');
         res.status(200).json({ message: 'Compra procesada exitosamente.', saleId: saleId });
 
     } catch (err) {
-        // Si algo falla, HAZ ROLLBACK de la transacción
         if (connection) {
             try {
                 await connection.rollback();
@@ -200,6 +268,174 @@ app.post('/api/sales/process', async (req, res) => {
     }
 });
 
+// ===========================================
+// ENDPOINTS PARA CLIENTES
+// ===========================================
+
+// GET /api/clients - Obtener todos los clientes
+app.get('/api/clients', async (req, res) => {
+    let connection;
+    try {
+        connection = await getConnection();
+        const result = await connection.execute(
+            `SELECT
+                ID_CLIENTE,
+                NOMBRE,
+                APELLIDO,
+                DIRECCION,
+                TELEFONO,
+                EMAIL
+             FROM CLIENTES`,
+            [],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        console.log(`Clientes obtenidos: ${result.rows.length} filas.`);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error al obtener clientes (endpoint):', err.message);
+        res.status(500).json({ message: 'Error interno del servidor al obtener clientes.', error: err.message });
+    } finally {
+        if (connection) {
+            try {
+                await connection.close();
+                console.log('Conexión cerrada después de obtener clientes.');
+            } catch (err) {
+                console.error('Error al cerrar la conexión de clientes:', err);
+            }
+        }
+    }
+});
+
+// POST /api/clients - Agregar un nuevo cliente
+app.post('/api/clients', async (req, res) => {
+    const { NOMBRE, APELLIDO, DIRECCION, TELEFONO, EMAIL } = req.body;
+    let connection;
+    try {
+        connection = await getConnection();
+        const result = await connection.execute(
+            `INSERT INTO CLIENTES (NOMBRE, APELLIDO, DIRECCION, TELEFONO, EMAIL)
+             VALUES (:NOMBRE, :APELLIDO, :DIRECCION, :TELEFONO, :EMAIL)
+             RETURNING ID_CLIENTE INTO :id_cliente`,
+            {
+                NOMBRE: NOMBRE,
+                APELLIDO: APELLIDO,
+                DIRECCION: DIRECCION,
+                TELEFONO: TELEFONO,
+                EMAIL: EMAIL || null, // Permite que EMAIL sea opcional si es null
+                id_cliente: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+            },
+            { autoCommit: true } // autoCommit en true para una inserción simple
+        );
+        const newClientId = result.outBinds.id_cliente[0];
+        console.log(`Cliente agregado con ID: ${newClientId}`);
+        res.status(201).json({ message: 'Cliente agregado exitosamente.', ID_CLIENTE: newClientId });
+    } catch (err) {
+        console.error('Error al agregar cliente (endpoint):', err.message);
+        // Manejo específico para el error de duplicidad de EMAIL (ORA-00001: unique constraint violated)
+        if (err.message.includes('ORA-00001')) {
+            res.status(409).json({ message: 'Error: El correo electrónico ya está registrado.', details: err.message });
+        } else {
+            res.status(500).json({ message: 'Error interno del servidor al agregar cliente.', error: err.message });
+        }
+    } finally {
+        if (connection) {
+            try {
+                await connection.close();
+                console.log('Conexión cerrada después de agregar cliente.');
+            } catch (err) {
+                console.error('Error al cerrar la conexión:', err);
+            }
+        }
+    }
+});
+
+// PUT /api/clients/:id - Actualizar un cliente existente
+app.put('/api/clients/:id', async (req, res) => {
+    const clientId = parseInt(req.params.id);
+    const { NOMBRE, APELLIDO, DIRECCION, TELEFONO, EMAIL } = req.body;
+    let connection;
+    try {
+        connection = await getConnection();
+        const bindVars = {
+            NOMBRE: NOMBRE,
+            APELLIDO: APELLIDO,
+            DIRECCION: DIRECCION,
+            TELEFONO: TELEFONO,
+            EMAIL: EMAIL || null,
+            id_cliente: clientId
+        };
+        const result = await connection.execute(
+            `UPDATE CLIENTES
+             SET
+                NOMBRE = :NOMBRE,
+                APELLIDO = :APELLIDO,
+                DIRECCION = :DIRECCION,
+                TELEFONO = :TELEFONO,
+                EMAIL = :EMAIL
+             WHERE ID_CLIENTE = :id_cliente`,
+            bindVars,
+            { autoCommit: true }
+        );
+        if (result.rowsAffected && result.rowsAffected === 1) {
+            console.log(`Cliente con ID ${clientId} actualizado.`);
+            res.status(200).json({ message: 'Cliente actualizado exitosamente.', ID_CLIENTE: clientId });
+        } else {
+            console.log(`Cliente con ID ${clientId} no encontrado para actualizar.`);
+            res.status(404).json({ message: 'Cliente no encontrado.' });
+        }
+    } catch (err) {
+        console.error('Error al actualizar cliente (endpoint):', err.message);
+        if (err.message.includes('ORA-00001')) {
+            res.status(409).json({ message: 'Error: El correo electrónico ya está registrado para otro cliente.', details: err.message });
+        } else {
+            res.status(500).json({ message: 'Error interno del servidor al actualizar cliente.', error: err.message });
+        }
+    } finally {
+        if (connection) {
+            try {
+                await connection.close();
+                console.log('Conexión cerrada después de actualizar cliente.');
+            } catch (err) {
+                console.error('Error al cerrar la conexión:', err);
+            }
+        }
+    }
+});
+
+// DELETE /api/clients/:id - Eliminar un cliente
+app.delete('/api/clients/:id', async (req, res) => {
+    const clientId = parseInt(req.params.id);
+    let connection;
+    try {
+        connection = await getConnection();
+        const result = await connection.execute(
+            `DELETE FROM CLIENTES WHERE ID_CLIENTE = :id_cliente`,
+            { id_cliente: clientId },
+            { autoCommit: true }
+        );
+        if (result.rowsAffected && result.rowsAffected === 1) {
+            console.log(`Cliente con ID ${clientId} eliminado.`);
+            res.status(200).json({ message: 'Cliente eliminado exitosamente.', ID_CLIENTE: clientId });
+        } else {
+            console.log(`Cliente con ID ${clientId} no encontrado para eliminar.`);
+            res.status(404).json({ message: 'Cliente no encontrado.' });
+        }
+    } catch (err) {
+        console.error('Error al eliminar cliente (endpoint):', err.message);
+        res.status(500).json({ message: 'Error interno del servidor al eliminar cliente.', error: err.message });
+    } finally {
+        if (connection) {
+            try {
+                await connection.close();
+                console.log('Conexión cerrada después de eliminar cliente.');
+            } catch (err) {
+                console.error('Error al cerrar la conexión:', err);
+            }
+        }
+    }
+});
+
+
 // Iniciar el servidor
 app.listen(port, () => {
     console.log(`Servidor backend corriendo en http://localhost:${port}`);
@@ -207,7 +443,6 @@ app.listen(port, () => {
 });
 
 // Manejo de cierres limpios de conexiones al apagar el servidor
-// Eliminamos oracledb.endPool() ya que no estamos usando un pool de conexiones
 process.once('SIGTERM', async () => {
     console.log('Recibido SIGTERM, cerrando la aplicación.');
     process.exit(0);
