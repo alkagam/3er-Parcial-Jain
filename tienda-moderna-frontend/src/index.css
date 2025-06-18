@@ -1,13 +1,43 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+    /* src/index.css */
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
+    /* Asegura que html, body y el div raíz (#root) ocupen el 100% de la altura del viewport.
+       Esto es crucial para que el fondo del <div> principal de tu App.js se vea en toda la pantalla. */
+    html, body, #root {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      /* Es importante que no haya overflow oculto aquí si tu contenido es más alto que la ventana
+         y quieres que se pueda hacer scroll. Pero para el fondo general, overflow: hidden en body puede ser útil
+         si el scroll lo maneja un div interno (como el <main> en App.js).
+         Si el problema persiste, puedes probar quitando esta línea 'overflow: hidden;' para ver si hay un conflicto. */
+      /* overflow: hidden; */ 
+    }
+
+    /* Estilos para un scrollbar personalizado (opcional, mejora la UI) */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    /* Versión para navegadores basados en Firefox */
+    .custom-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #888 #f1f1f1;
+    }
+    

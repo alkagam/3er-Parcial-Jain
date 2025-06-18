@@ -38,5 +38,12 @@ export const addClient = (clientData) => api.post('/api/clients', clientData);
 // Si tu backend usa '/api/providers', déjalo así. Si usa '/api/proveedores', cámbialo.
 export const getProviders = () => api.get('/api/providers'); 
 export const addProvider = (providerData) => api.post('/api/providers', providerData);
+export const updateProvider = (id, providerData) => api.put(`/api/providers/${id}`, providerData); 
+export const deleteProvider = (id) => api.delete(`/api/providers/${id}`);
+
+
+
+
+export const getCategories = () => api.get('/api/categories');
 
 export default api;

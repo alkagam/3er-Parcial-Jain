@@ -1,22 +1,20 @@
 // src/pages/ClientManagement.js
 import React, { useState, useEffect } from 'react';
-import { getClients, addClient } from '../Api'; // Asegúrate que sea '../Api'
-import { Users, UserPlus } from 'lucide-react'; // Iconos para la UI
+import { getClients, addClient } from '../Api'; 
+import { Users, UserPlus, XCircle, Loader2, Save } from 'lucide-react'; // Iconos para la UI
 
 function ClientManagement() {
-  // Estado para la lista de clientes
   const [clients, setClients] = useState([]);
-  // Estado para los datos del formulario de agregar/editar cliente
-  // Asumimos que el backend espera y devuelve nombres de propiedades en MAYÚSCULAS
   const [formData, setFormData] = useState({
-    NOMBRE: '',    // <-- Cambiado a MAYÚSCULAS para coincidir con lo que probablemente espera el backend
-    APELLIDO: '',  // <-- Cambiado a MAYÚSCULAS
-    DIRECCION: '', // <-- Cambiado a MAYÚSCULAS
-    TELEFONO: ''   // <-- Cambiado a MAYÚSCULAS
+    NOMBRE: '',
+    APELLIDO: '',
+    DIRECCION: '',
+    TELEFONO: ''
   });
-  const [loading, setLoading] = useState(true); // Estado de carga
-  const [error, setError] = useState(null);     // Estado de error
-  const [message, setMessage] = useState('');   // Estado para mensajes al usuario
+  const [loading, setLoading] = useState(true); 
+  const [error, setError] = useState(null);    
+  const [message, setMessage] = useState('');  
+  const [formErrors, setFormErrors] = useState({}); // Estado para errores de validación por campo
 
   // useEffect para cargar clientes al montar el componente
   useEffect(() => {
@@ -27,9 +25,10 @@ function ClientManagement() {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      setError(null); // Limpiar errores previos
-      const res = await getClients(); // Llama a la función getClients de Api.js
-      setClients(res.data); // Axios devuelve la data en res.data
+      setError(null); 
+      setMessage(''); // Limpiar mensajes al recargar
+      const res = await getClients(); 
+      setClients(res.data);
       setLoading(false);
     } catch (err) {
       console.error("Error al obtener clientes:", err);
@@ -41,33 +40,63 @@ function ClientManagement() {
   // Maneja los cambios en los campos del formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
-    // Actualiza el formData usando los nombres de las propiedades en MAYÚSCULAS
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Limpiar el error de ese campo tan pronto como el usuario empieza a escribir
+    if (formErrors[name]) {
+      setFormErrors(prev => ({ ...prev, [name]: null }));
+    }
+  };
+
+  // Función de validación del formulario
+  const validateForm = () => {
+    const errors = {};
+    if (!formData.NOMBRE.trim()) {
+        errors.NOMBRE = 'El nombre del cliente es requerido.';
+    }
+    // Puedes añadir más validaciones aquí, ej. para TELEFONO o EMAIL si los tuvieras
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   // Maneja el envío del formulario para agregar un cliente
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setMessage(''); // Limpia mensajes anteriores
+    setError(null); // Limpia errores generales
+
+    if (!validateForm()) {
+      setMessage('Error: Por favor, corrige los campos marcados en el formulario.');
+      return;
+    }
+
+    setLoading(true); // Iniciar carga para la operación de envío
     try {
-      // Envía los datos del formulario al backend. Se asume que el backend espera propiedades en MAYÚSCULAS.
-      await addClient(formData); 
+      await addClient({
+        NOMBRE: formData.NOMBRE,
+        APELLIDO: formData.APELLIDO || null, 
+        DIRECCION: formData.DIRECCION || null, 
+        TELEFONO: formData.TELEFONO || null 
+      });
       setMessage('Cliente agregado exitosamente.');
-      setFormData({ // Limpia el formulario después del envío
+      setFormData({ 
         NOMBRE: '', APELLIDO: '', DIRECCION: '', TELEFONO: ''
       });
-      fetchClients(); // Recarga la lista de clientes para mostrar el nuevo
+      setFormErrors({}); // Limpiar errores del formulario
+      fetchClients(); 
     } catch (err) {
       console.error("Error al agregar cliente:", err);
-      setMessage(`Error al agregar cliente: ${err.response?.data?.details || err.message}`);
+      setMessage(`Error al agregar cliente: ${err.response?.data?.message || err.message}`);
+    } finally {
+        setLoading(false); // Finalizar carga
     }
   };
 
   // Renderizado condicional mientras carga los datos
-  if (loading) {
+  if (loading && clients.length === 0 && !error) { // Mostrar spinner solo en la carga inicial
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 font-inter">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
-        <p className="ml-4 text-xl font-semibold text-gray-700">Cargando clientes...</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 font-inter transition-colors duration-300">
+        <Loader2 className="animate-spin w-16 h-16 text-blue-500 dark:text-blue-400" />
+        <p className="ml-4 text-xl font-semibold text-gray-700 dark:text-gray-300">Cargando clientes...</p>
       </div>
     );
   }
@@ -75,12 +104,15 @@ function ClientManagement() {
   // Renderizado condicional si ocurre un error
   if (error) {
     return (
-      <div className="text-center p-6 bg-red-100 border border-red-400 text-red-700 rounded-lg shadow-md min-h-screen flex flex-col justify-center items-center font-inter">
-        <h2 className="text-xl font-bold mb-2">Error</h2>
-        <p className="mb-4">{error}</p>
+      <div className="text-center p-8 bg-red-100 border border-red-400 text-red-700 rounded-lg shadow-md min-h-screen flex flex-col justify-center items-center font-inter
+                  dark:bg-red-900 dark:border-red-700 dark:text-red-200 transition-colors duration-300">
+        <XCircle className="w-20 h-20 text-red-600 dark:text-red-400 mb-6" />
+        <h2 className="text-3xl font-bold mb-4">Error al Cargar Clientes</h2>
+        <p className="mb-6 text-xl">{error}</p>
         <button
-            onClick={fetchClients} // Botón para reintentar la carga
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-300 shadow-md"
+            onClick={fetchClients} 
+            className="px-8 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors duration-300 shadow-lg transform hover:scale-105
+                       dark:bg-blue-700 dark:hover:bg-blue-600 dark:text-gray-100"
         >
             Reintentar Carga
         </button>
@@ -90,79 +122,120 @@ function ClientManagement() {
 
   // Renderizado principal del componente
   return (
-    <div className="container mx-auto p-6 bg-white rounded-lg shadow-lg font-inter">
-      <h2 className="text-3xl font-bold mb-6 text-blue-800 text-center flex items-center justify-center gap-3">
-        <UserPlus className="w-8 h-8 text-blue-600" />
+    <div className="container mx-auto p-8 bg-white rounded-xl shadow-2xl font-inter
+                    dark:bg-gray-800 dark:text-gray-100 transition-colors duration-300">
+      <h2 className="text-4xl font-extrabold mb-8 text-blue-800 text-center tracking-tight flex items-center justify-center gap-3
+                     dark:text-blue-400 transition-colors duration-300">
+        <Users className="w-10 h-10 text-blue-600 dark:text-blue-400" />
         Gestión de Clientes
       </h2>
 
-      {message && ( // Muestra mensajes de éxito/error al usuario
-        <div className={`p-3 mb-4 rounded-lg ${message.startsWith('Error') ? 'bg-red-100 text-red-700 border-red-400' : 'bg-green-100 text-green-700 border-green-400'} border`}>
-          {message}
+      {/* Área para mensajes de éxito/error al usuario */}
+      {message && (
+        <div className={`relative p-4 mb-6 rounded-lg ${message.startsWith('Error') ? 'bg-red-100 text-red-800 border-red-500 dark:bg-red-900 dark:border-red-700 dark:text-red-200' : 'bg-green-100 text-green-800 border-green-500 dark:bg-green-900 dark:border-green-700 dark:text-green-200'} border shadow-md flex items-center justify-between transition-colors duration-300`}>
+          <p className="font-semibold flex items-center">
+            {message.startsWith('Error') ? <XCircle className="w-5 h-5 mr-2" /> : null}
+            {message}
+          </p>
+          <button
+            onClick={() => setMessage('')}
+            className={`text-gray-600 hover:text-gray-800 transition-colors duration-200 dark:text-gray-400 dark:hover:text-gray-100`}
+            aria-label="Cerrar mensaje"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
       {/* Formulario para agregar cliente */}
-      <form onSubmit={handleSubmit} className="mb-8 p-6 border border-gray-200 rounded-lg shadow-sm">
-        <h3 className="text-2xl font-semibold mb-4 text-blue-700">Agregar Nuevo Cliente</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="mb-10 p-8 bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl shadow-lg
+                      dark:from-indigo-950 dark:to-indigo-800 dark:border-indigo-700 transition-colors duration-300">
+        <h3 className="text-2xl font-bold mb-5 text-indigo-800 flex items-center dark:text-indigo-300">
+          <UserPlus className="w-8 h-8 mr-3 text-indigo-600 dark:text-indigo-400" />
+          Agregar Nuevo Cliente
+        </h3>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label htmlFor="NOMBRE" className="block text-gray-700 text-sm font-bold mb-2">Nombre:</label>
+            <label htmlFor="NOMBRE" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Nombre:<span className="text-red-500">*</span></label>
             <input type="text" id="NOMBRE" name="NOMBRE" value={formData.NOMBRE} onChange={handleChange} required
-                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
+                   className={`shadow-inner appearance-none border ${formErrors.NOMBRE ? 'border-red-500' : 'border-gray-300'} rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
+                               dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300`} />
+            {formErrors.NOMBRE && <p className="text-red-500 text-xs italic mt-1">{formErrors.NOMBRE}</p>}
           </div>
           <div>
-            <label htmlFor="APELLIDO" className="block text-gray-700 text-sm font-bold mb-2">Apellido:</label>
+            <label htmlFor="APELLIDO" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Apellido:</label>
             <input type="text" id="APELLIDO" name="APELLIDO" value={formData.APELLIDO} onChange={handleChange}
-                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
+                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
+                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
           </div>
           <div>
-            <label htmlFor="DIRECCION" className="block text-gray-700 text-sm font-bold mb-2">Dirección:</label>
+            <label htmlFor="DIRECCION" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Dirección:</label>
             <input type="text" id="DIRECCION" name="DIRECCION" value={formData.DIRECCION} onChange={handleChange}
-                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
+                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
+                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
           </div>
           <div>
-            <label htmlFor="TELEFONO" className="block text-gray-700 text-sm font-bold mb-2">Teléfono:</label>
+            <label htmlFor="TELEFONO" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Teléfono:</label>
             <input type="text" id="TELEFONO" name="TELEFONO" value={formData.TELEFONO} onChange={handleChange}
-                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
+                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
+                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
           </div>
-        </div>
-        <div className="flex justify-end mt-6">
-          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200">
-            Agregar Cliente
-          </button>
-        </div>
-      </form>
+          <div className="md:col-span-2 flex justify-end mt-4">
+            <button type="submit" disabled={loading || Object.keys(formErrors).some(key => formErrors[key])} 
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 transition duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center
+                               dark:bg-indigo-700 dark:hover:bg-indigo-600 dark:text-gray-100">
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin inline-block w-5 h-5 mr-2" /> Agregando...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-5 h-5 mr-2" /> Agregar Cliente
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
 
       {/* Listado de Clientes */}
-      <h3 className="text-2xl font-bold mb-4 text-blue-700">Listado de Clientes</h3>
-      {clients.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200">
-          <table className="min-w-full bg-white">
-            <thead className="bg-gray-200">
-              <tr>
-                <th className="py-3 px-4 border-b text-left text-sm font-semibold text-gray-600 uppercase">ID</th>
-                <th className="py-3 px-4 border-b text-left text-sm font-semibold text-gray-600 uppercase">Nombre Completo</th>
-                <th className="py-3 px-4 border-b text-left text-sm font-semibold text-gray-600 uppercase">Dirección</th>
-                <th className="py-3 px-4 border-b text-left text-sm font-semibold text-gray-600 uppercase">Teléfono</th>
-                {/* Puedes añadir una columna de Acciones si implementas editar/eliminar */}
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client, index) => (
-                <tr key={client.ID_CLIENTE || index} className="hover:bg-gray-50 border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-800">{client.ID_CLIENTE || 'N/A'}</td>
-                  <td className="py-3 px-4 text-gray-800">{client.NOMBRE} {client.APELLIDO}</td> {/* Acceso directo a NOMBRE y APELLIDO */}
-                  <td className="py-3 px-4 text-gray-800">{client.DIRECCION}</td>
-                  <td className="py-3 px-4 text-gray-800">{client.TELEFONO}</td>
+      <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-xl shadow-lg
+                      dark:from-gray-900 dark:to-gray-800 dark:border-gray-700 transition-colors duration-300">
+        <h3 className="text-2xl font-bold mb-5 text-gray-800 flex items-center dark:text-gray-200">
+          <Users className="w-8 h-8 mr-3 text-gray-600 dark:text-gray-400" />
+          Listado de Clientes
+        </h3>
+        {clients.length > 0 ? (
+          <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
+            <table className="min-w-full bg-white dark:bg-gray-700 transition-colors duration-300">
+              <thead className="bg-gray-200 dark:bg-gray-600 transition-colors duration-300">
+                <tr>
+                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">ID</th>
+                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Nombre Completo</th>
+                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Dirección</th>
+                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Teléfono</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-gray-600 text-center py-6">No hay clientes registrados. Agrega uno nuevo.</p>
-      )}
+              </thead>
+              <tbody>
+                {clients.map((client, index) => (
+                  <tr key={client.ID_CLIENTE || index} className={`hover:bg-gray-100 border-b border-gray-100
+                                                                   dark:hover:bg-gray-600 dark:border-gray-700
+                                                                   ${index % 2 === 0 ? 'bg-white dark:bg-gray-700' : 'bg-gray-50 dark:bg-gray-800'} transition-colors duration-300`}>
+                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">{client.ID_CLIENTE || 'N/A'}</td>
+                    <td className="py-4 px-4 text-gray-800 text-base font-medium dark:text-gray-200">{client.NOMBRE} {client.APELLIDO}</td>
+                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">{client.DIRECCION}</td>
+                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">{client.TELEFONO}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-600 text-center py-6 mt-4 dark:text-gray-300">No hay clientes registrados. Agrega uno nuevo.</p>
+        )}
+      </div>
     </div>
   );
 }
