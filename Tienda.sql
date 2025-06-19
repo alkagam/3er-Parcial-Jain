@@ -266,7 +266,7 @@ DBMS_OUTPUT.PUT_LINE('Datos de ejemplo en PROVEEDORES insertados.');
 -- 7: Higiene y Limpieza
 -- 8: Frutas y Verduras
 -- 9: Congelados
-
+-- 10: Liquiles (ej. jugos, néctares)
 -- PRODUCTOS - INSERTS ADAPTADOS
 INSERT INTO PRODUCTOS (NOMBRE, DESCRIPCION, PRECIO_VENTA, STOCK_ACTUAL, FECHA_CADUCIDAD, ID_PROVEEDOR, ID_CATEGORIA, IMAGEN_URL, CODIGO_BARRAS, UNIDAD_MEDIDA, PRECIO_COMPRA, STOCK_MINIMO, ACTIVO, PESO_KG, VOLUMEN_M3)
 VALUES ('Leche Entera', 'Leche pasteurizada 1L', 25.00, 10, SYSDATE + 10, 2, 4, 'https://placehold.co/100x100/A0B2C8/FFFFFF?text=Leche', '7501000010001', 'Litro', 18.00, 5, 1, 1.0, 0.001);
@@ -492,3 +492,22 @@ DBMS_OUTPUT.PUT_LINE('Todos los datos insertados y commit realizado.');
 
 SET FEEDBACK ON
 SET VERIFY ON
+
+
+
+-- *****************************************************************************
+-- 6. ConsultasX
+-- *****************************************************************************
+
+
+SELECT
+    p.ID_PRODUCTO,
+    p.NOMBRE,
+    p.STOCK_ACTUAL AS STOCK, -- Alias para que coincida con `p.STOCK` en el frontend
+    prov.NOMBRE_PROVEEDOR
+FROM
+    PRODUCTOS p
+JOIN
+    PROVEEDORES prov ON p.ID_PROVEEDOR = prov.ID_PROVEEDOR
+WHERE
+    p.STOCK_ACTUAL <= 5 AND p.ACTIVO = 1; -- La condición para bajo stock y solo productos activos
