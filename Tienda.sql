@@ -59,11 +59,11 @@ CREATE TABLE VENTA (
 -- 2.6. Tabla DETALLE_VENTA
 CREATE TABLE DETALLE_VENTA (
     id_detalle_venta NUMBER(10) PRIMARY KEY,
-    id_venta NUMBER(10) NOT NULL,
+    id_venta_detalle_venta NUMBER(10) NOT NULL,
     id_producto NUMBER(10) NOT NULL,
     cantidad NUMBER(5) NOT NULL,
     precio_unitario_vendido NUMBER(10,2) NOT NULL,
-    CONSTRAINT fk_detalle_venta FOREIGN KEY (id_venta)
+    CONSTRAINT fk_detalle_venta FOREIGN KEY (id_venta_detalle_venta)
     REFERENCES VENTA(id_venta),
     CONSTRAINT fk_detalle_producto FOREIGN KEY (id_producto)
     REFERENCES CAT_PRODUCTO(id_producto)

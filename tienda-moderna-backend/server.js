@@ -27,7 +27,7 @@ app.use('/api/clientes', clientesRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/ventas', salesRoutes);
 app.use('/api/proveedores', suppliersRoutes);
-app.use('/api/reportes', reportsRoutes); // <--- ¡CAMBIA 'reports' a 'reportes' aquí!
+app.use('/api/reportes', reportsRoutes); // <--- ¡CORREGIDO: Ahora usa 'reportes' consistentemente!
 
 // Ruta de prueba
 app.get('/', (req, res) => {

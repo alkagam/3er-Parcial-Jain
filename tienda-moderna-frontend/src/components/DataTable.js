@@ -23,7 +23,7 @@ const DataTable = ({ title, data, headers, keyAccessor, tableColorTheme, renderC
       rowHover: 'hover:bg-rose-100 dark:hover:bg-rose-800',
       cellText: 'text-gray-800 dark:text-gray-200'
     },
-    purple: { // Tema de color para la tabla de productos en ProductManagement
+    purple: { // Tema de color para la tabla de productos y clientes
       bg: 'bg-purple-50 dark:bg-purple-950',
       border: 'border-purple-200 dark:border-purple-700',
       text: 'text-purple-800 dark:text-purple-200',
@@ -39,6 +39,24 @@ const DataTable = ({ title, data, headers, keyAccessor, tableColorTheme, renderC
       headerBg: 'bg-orange-100 dark:bg-orange-800',
       headerText: 'text-orange-700 dark:text-orange-300',
       rowHover: 'hover:bg-orange-100 dark:hover:bg-orange-800',
+      cellText: 'text-gray-800 dark:text-gray-200'
+    },
+    green: { // Tema de color para reportes de caja en Reports
+      bg: 'bg-green-50 dark:bg-green-950',
+      border: 'border-green-200 dark:border-green-700',
+      text: 'text-green-800 dark:text-green-200',
+      headerBg: 'bg-green-100 dark:bg-green-800',
+      headerText: 'text-green-700 dark:text-green-300',
+      rowHover: 'hover:bg-green-100 dark:hover:bg-green-800',
+      cellText: 'text-gray-800 dark:text-gray-200'
+    },
+    blue: { // Tema de color para reportes detallados en Reports
+      bg: 'bg-blue-50 dark:bg-blue-950',
+      border: 'border-blue-200 dark:border-blue-700',
+      text: 'text-blue-800 dark:text-blue-200',
+      headerBg: 'bg-blue-100 dark:bg-blue-800',
+      headerText: 'text-blue-700 dark:text-blue-300',
+      rowHover: 'hover:bg-blue-100 dark:hover:bg-blue-800',
       cellText: 'text-gray-800 dark:text-gray-200'
     }
   };
@@ -90,26 +108,24 @@ const DataTable = ({ title, data, headers, keyAccessor, tableColorTheme, renderC
                   );
                 }
 
-                let value;
-                // Intenta obtener el valor usando el header directamente (para proveedores)
-                if (row.hasOwnProperty(header)) {
-                  value = row[header];
-                } else {
-                  // Si no coincide directamente, intenta convertir el header a snake_case
-                  // Esto ayuda a manejar casos como "ID Proveedor" -> "id_proveedor" o "Nombre Producto" -> "nombre_producto"
-                  const snakeCaseHeader = header.toLowerCase().replace(/\s/g, '_');
-                  if (row.hasOwnProperty(snakeCaseHeader)) {
-                    value = row[snakeCaseHeader];
-                  } else {
-                    // Intenta convertir el header a camelCase (por si acaso)
-                    const camelCaseHeader = header.replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
-                      return index === 0 ? word.toLowerCase() : word.toUpperCase();
-                    }).replace(/\s+/g, '');
-                    if (row.hasOwnProperty(camelCaseHeader)) {
-                      value = row[camelCaseHeader];
+                let value = row[header]; // Intenta obtener el valor directamente por el nombre del header
+
+                // Manejo de snake_case o camelCase si la clave directa no funciona (esto es un fallback)
+                // Esto es útil si el backend devuelve nombres como 'nombre_producto' pero el header es 'Nombre Producto'
+                if (value === undefined) {
+                    const snakeCaseHeader = header.toLowerCase().replace(/\s/g, '_');
+                    if (row.hasOwnProperty(snakeCaseHeader)) {
+                        value = row[snakeCaseHeader];
+                    } else {
+                        const camelCaseHeader = header.replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
+                            return index === 0 ? word.toLowerCase() : word.toUpperCase();
+                        }).replace(/\s+/g, '');
+                        if (row.hasOwnProperty(camelCaseHeader)) {
+                            value = row[camelCaseHeader];
+                        }
                     }
-                  }
                 }
+
 
                 // Manejo especial para la columna 'Imagen URL'
                 if (header === 'Imagen URL') {
@@ -125,17 +141,21 @@ const DataTable = ({ title, data, headers, keyAccessor, tableColorTheme, renderC
                   );
                 }
 
-                // Formateo para precios (asume que 'P. Venta' y 'P. Compra' son números)
-                if (header === 'P. Venta' || header === 'P. Compra') {
-                  value = value ? `$${parseFloat(value).toFixed(2)}` : '$0.00';
+                // Formateo para precios (asume que los headers relevantes contienen 'P. Venta', 'P. Compra', 'Total', 'Monto')
+                if (header.includes('P. Venta') || header.includes('P. Compra') || header.includes('Total') || header.includes('Monto') || header.includes('Precio') || header.includes('Subtotal')) {
+                    const numValue = parseFloat(value);
+                    value = !isNaN(numValue) ? `$${numValue.toFixed(2)}` : (value !== undefined && value !== null ? value.toString() : '');
                 }
                 // Formateo para fechas (asume que los headers de fecha contienen "Fecha" o "Caducidad")
-                // Se busca si el encabezado contiene "Fecha" o "Caducidad" para aplicar el formato
-                else if (typeof value === 'string' && (header.includes('Fecha') || header.includes('Caducidad')) && value.match(/^\d{4}-\d{2}-\d{2}/)) {
-                  value = new Date(value).toLocaleDateString();
-                } else if (value instanceof Date) {
-                  value = value.toLocaleDateString();
+                else if (value && (header.includes('Fecha') || header.includes('Caducidad'))) {
+                  const dateValue = new Date(value);
+                  if (!isNaN(dateValue.getTime())) { // Verifica si la fecha es válida
+                    value = dateValue.toLocaleDateString();
+                  } else {
+                    value = value.toString(); // Si no es una fecha válida, se muestra como string
+                  }
                 }
+
 
                 return (
                   <td key={colIndex} className={`py-2 px-3 border-b ${colors.border} ${colors.cellText} text-sm whitespace-normal`}>

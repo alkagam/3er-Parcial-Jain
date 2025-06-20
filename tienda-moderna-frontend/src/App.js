@@ -1,179 +1,178 @@
+// src/App.js
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+// Importa las páginas
+import Dashboard from './pages/Dashboard';
+import ProductManagement from './pages/ProductManagement';
+import SalesPOS from './pages/SalesPOS';
+import Reports from './pages/Reports';
+import ClientManagement from './pages/ClientManagement';
+import ProviderManagement from './pages/ProviderManagement';
 
-const BASE_URL = 'http://localhost:5000/api'; // Asegúrate de que esta URL coincida con la de tu backend
+// Importa los iconos de Lucide React
+import { LayoutDashboard, Package, Users, Truck, BarChart2, ShoppingBag, ShoppingCart, Sun, Moon } from 'lucide-react';
 
-const api = {
-  // Función genérica para hacer fetch, maneja errores y parseo JSON
-  fetchData: async (endpoint, options = {}) => {
-    try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, options);
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `Error HTTP: ${response.status} - ${response.statusText}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          if (errorJson.error) {
-            errorMessage = errorJson.error;
-          }
-          if (errorJson.details) {
-            errorMessage += ` Detalle: ${errorJson.details}`;
-          }
-        } catch (e) {
-          // Si no es JSON, usa el texto plano
-          errorMessage += ` Detalle: ${errorText}`;
-        }
-        throw new Error(errorMessage);
-      }
-      // Verificar el tipo de contenido antes de intentar parsear como JSON
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-          return await response.json();
-      } else {
-          return response.text(); // Devuelve texto si no es JSON (ej. mensaje de éxito sin body)
-      }
-    } catch (error) {
-      console.error(`Error al obtener datos de ${endpoint}:`, error);
-      throw error;
+function App() {
+  // Estado para controlar el modo oscuro. Se inicializa leyendo de localStorage.
+  const [darkMode, setDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('theme');
+    return savedTheme === 'dark' ? true : false;
+  });
+
+  // useEffect para aplicar o remover la clase 'dark' en el elemento <html>
+  useEffect(() => {
+    const htmlElement = document.documentElement;
+    if (darkMode) {
+      htmlElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      htmlElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
     }
-  },
+  }, [darkMode]);
 
-  // === Funciones para Clientes ===
-  getClients: async () => {
-    return api.fetchData('/clientes');
-  },
-  addCliente: async (clienteData) => {
-    return api.fetchData('/clientes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(clienteData)
-    });
-  },
-  updateCliente: async (id, clienteData) => {
-    return api.fetchData(`/clientes/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(clienteData)
-    });
-  },
-  deleteCliente: async (id) => {
-    return api.fetchData(`/clientes/${id}`, {
-      method: 'DELETE'
-    });
-  },
+  // Función para alternar el modo oscuro
+  const toggleDarkMode = () => {
+    setDarkMode(prevMode => !prevMode);
+  };
 
-  // === Funciones para Productos ===
-  getProducts: async () => {
-    return api.fetchData('/productos');
-  },
-  fetchProductoById: async (id) => {
-    return api.fetchData(`/productos/${id}`);
-  },
-  addProduct: async (productData) => {
-    return api.fetchData('/productos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(productData)
-    });
-  },
-  updateProduct: async (id, productData) => {
-    return api.fetchData(`/productos/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(productData)
-    });
-  },
-  deleteProduct: async (id) => {
-    return api.fetchData(`/productos/${id}`, {
-      method: 'DELETE'
-    });
-  },
-  fetchProductosAlerta: async () => {
-    return api.fetchData('/productos/alerta');
-  },
+  return (
+    <Router>
+      <div className="flex min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-inter transition-colors duration-300">
+        {/* Sidebar de Navegación */}
+        <aside className="w-64 bg-gradient-to-br from-blue-800 to-blue-950 text-white shadow-2xl flex flex-col p-6 rounded-r-2xl
+                         dark:from-gray-950 dark:to-black transition-colors duration-300">
+          <div className="text-3xl font-extrabold mb-10 text-center flex items-center justify-center gap-2 text-blue-200
+                         dark:text-gray-300 transition-colors duration-300">
+            <ShoppingBag className="w-8 h-8" />
+            La Moderna
+          </div>
+          <nav className="flex-grow">
+            <ul>
+              <li className="mb-4">
+                <NavLink
+                  to="/dashboard"
+                  className={({ isActive }) => {
+                    const baseClasses = "flex items-center p-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-105";
+                    const activeClasses = isActive ? "bg-blue-600 text-white shadow-lg dark:bg-blue-700" : "hover:bg-blue-700 dark:hover:bg-gray-700";
+                    return `${baseClasses} ${activeClasses}`;
+                  }}
+                  end
+                >
+                  <LayoutDashboard className="w-6 h-6 mr-3" />
+                  Dashboard
+                </NavLink>
+              </li>
+              <li className="mb-4">
+                <NavLink
+                  to="/products"
+                  className={({ isActive }) => {
+                    const baseClasses = "flex items-center p-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-105";
+                    const activeClasses = isActive ? "bg-blue-600 text-white shadow-lg dark:bg-blue-700" : "hover:bg-blue-700 dark:hover:bg-gray-700";
+                    return `${baseClasses} ${activeClasses}`;
+                  }}
+                >
+                  <Package className="w-6 h-6 mr-3" />
+                  Productos
+                </NavLink>
+              </li>
+              <li className="mb-4">
+                <NavLink
+                  to="/sales"
+                  className={({ isActive }) => {
+                    const baseClasses = "flex items-center p-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-105";
+                    const activeClasses = isActive ? "bg-blue-600 text-white shadow-lg dark:bg-blue-700" : "hover:bg-blue-700 dark:hover:bg-gray-700";
+                    return `${baseClasses} ${activeClasses}`;
+                  }}
+                >
+                  <ShoppingCart className="w-6 h-6 mr-3" />
+                  Ventas POS
+                </NavLink>
+              </li>
+              <li className="mb-4">
+                <NavLink
+                  to="/reports"
+                  className={({ isActive }) => {
+                    const baseClasses = "flex items-center p-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-105";
+                    const activeClasses = isActive ? "bg-blue-600 text-white shadow-lg dark:bg-blue-700" : "hover:bg-blue-700 dark:hover:bg-gray-700";
+                    return `${baseClasses} ${activeClasses}`;
+                  }}
+                >
+                  <BarChart2 className="w-6 h-6 mr-3" />
+                  Reportes
+                </NavLink>
+              </li>
+              <li className="mb-4">
+                <NavLink
+                  to="/clients"
+                  className={({ isActive }) => {
+                    const baseClasses = "flex items-center p-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-105";
+                    const activeClasses = isActive ? "bg-blue-600 text-white shadow-lg dark:bg-blue-700" : "hover:bg-blue-700 dark:hover:bg-gray-700";
+                    return `${baseClasses} ${activeClasses}`;
+                  }}
+                >
+                  <Users className="w-6 h-6 mr-3" />
+                  Clientes
+                </NavLink>
+              </li>
+              <li className="mb-4">
+                <NavLink
+                  to="/providers"
+                  className={({ isActive }) => {
+                    const baseClasses = "flex items-center p-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-105";
+                    const activeClasses = isActive ? "bg-blue-600 text-white shadow-lg dark:bg-blue-700" : "hover:bg-blue-700 dark:hover:bg-gray-700";
+                    return `${baseClasses} ${activeClasses}`;
+                  }}
+                >
+                  <Truck className="w-6 h-6 mr-3" />
+                  Proveedores
+                </NavLink>
+              </li>
+            </ul>
+          </nav>
 
-  // Función para obtener categorías de productos
-  getCategories: async () => {
-    return api.fetchData('/productos/categorias');
-  },
+          {/* Botón para alternar modo oscuro/claro */}
+          <div className="mt-auto pt-6 border-t border-blue-700 dark:border-gray-700">
+            <button
+              onClick={toggleDarkMode}
+              className="w-full flex items-center justify-center p-3 rounded-lg text-lg font-medium transition-all duration-200
+                         bg-blue-700 hover:bg-blue-600 text-white shadow-md
+                         dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100"
+            >
+              {darkMode ? (
+                <>
+                  <Sun className="w-6 h-6 mr-2" /> Modo Claro
+                </>
+              ) : (
+                <>
+                  <Moon className="w-6 h-6 mr-2" /> Modo Oscuro
+                </>
+              )}
+            </button>
+          </div>
+        </aside>
 
-  // === Funciones para Proveedores ===
-  fetchProveedores: async () => {
-    return api.fetchData('/proveedores');
-  },
-  addProveedor: async (proveedorData) => {
-    return api.fetchData('/proveedores', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(proveedorData)
-    });
-  },
-  updateProveedor: async (id, proveedorData) => {
-    return api.fetchData(`/proveedores/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(proveedorData)
-    });
-  },
-  deleteProveedor: async (id) => {
-    return api.fetchData(`/proveedores/${id}`, {
-      method: 'DELETE'
-    });
-  },
+        {/* Contenido Principal */}
+        <main className="flex-grow p-8 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/products" element={<ProductManagement />} />
+            <Route path="/sales" element={<SalesPOS />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/clients" element={<ClientManagement />} />
+            <Route path="/providers" element={<ProviderManagement />} />
+            <Route path="*" element={
+              <div className="flex flex-col items-center justify-center h-full text-gray-700 dark:text-gray-300">
+                <h1 className="text-4xl font-bold mb-4">404 - Página no encontrada</h1>
+                <p className="text-lg">La URL a la que intentas acceder no existe.</p>
+              </div>
+            } />
+          </Routes>
+        </main>
+      </div>
+    </Router>
+  );
+}
 
-  // === Funciones para Ventas ===
-  fetchVentasCompletas: async () => {
-    return api.fetchData('/ventas');
-  },
-  fetchDetalleVenta: async (idVenta) => {
-    return api.fetchData(`/ventas/${idVenta}/details`);
-  },
-  registerSale: async ({ cartItems, total, clientId, paymentMethod }) => {
-    const saleData = {
-      cartItems,
-      total,
-      clientId: clientId === '' ? null : clientId,
-      paymentMethod
-    };
-    return api.fetchData('/ventas/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(saleData)
-    });
-  },
-
-  // === Funciones para Reportes ===
-  fetchCorteCajaDiario: async () => {
-    const result = await api.fetchData('/reportes/corte-caja/diario');
-    return result ? [result] : [];
-  },
-  fetchCorteCajaIntervalo: async (fechaInicio, fechaFin) => {
-    return api.fetchData(`/reportes/corte-caja/intervalo?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
-  },
-  fetchVentasSemanal: async () => {
-    return api.fetchData('/reportes/ventas/semanal');
-  },
-  fetchDetailedSalesReport: async (fechaInicio = null, fechaFin = null) => {
-    let endpoint = '/reportes/detailed-sales-report';
-    const params = new URLSearchParams();
-    if (fechaInicio) {
-      params.append('fechaInicio', fechaInicio);
-    }
-    if (fechaFin) {
-      params.append('fechaFin', fechaFin);
-    }
-    if (params.toString()) {
-      endpoint += `?${params.toString()}`;
-    }
-    return api.fetchData(endpoint);
-  },
-  fetchTopProductosVendidos: async () => {
-    return api.fetchData('/reportes/ventas/top-productos');
-  },
-  fetchTotalPorProveedor: async () => {
-    return api.fetchData('/reportes/ventas/total-por-proveedor');
-  },
-  fetchTopCompradores: async () => {
-    return api.fetchData('/reportes/clientes/top-compradores');
-  },
-};
-
-export default api;
+export default App;

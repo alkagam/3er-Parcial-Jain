@@ -1,8 +1,8 @@
 // src/pages/ClientManagement.js
 import React, { useState, useEffect } from 'react';
-import api from '../Api'; // Importa la instancia de API, no dataService
-import DataTable from '../components/DataTable';
-import { User, PlusCircle, Edit, Trash2, Loader2, AlertTriangle, XCircle, CheckCircle2, RefreshCcw } from 'lucide-react'; // Iconos para gestión de clientes
+import api from '../Api'; // Importa la instancia de API
+import DataTable from '../components/DataTable'; // <--- ¡Asegúrate que esta importación es CORRECTA!
+import { User, PlusCircle, Edit, Trash2, Loader2, AlertTriangle, XCircle, CheckCircle2, RefreshCcw } from 'lucide-react'; // Iconos
 
 function ClientManagement() {
   const [clients, setClients] = useState([]);
@@ -12,7 +12,7 @@ function ClientManagement() {
 
   // Estados del formulario
   const [formData, setFormData] = useState({
-    id_cliente: null, // Para editar, almacena el ID del cliente
+    id_cliente: null, 
     nombre_cliente: '',
     telefono_cliente: '',
     email_cliente: '',
@@ -23,13 +23,13 @@ function ClientManagement() {
 
   // Estados para el modal de confirmación de eliminación
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState(null); // ID del cliente a eliminar
+  const [clientToDelete, setClientToDelete] = useState(null); 
 
   // Función para cargar clientes
   const loadClients = async () => {
     setLoading(true);
     setError(null);
-    setMessage(''); // Limpiar mensajes al recargar
+    setMessage(''); 
     try {
       const data = await api.fetchClientes();
       // Mapear los datos del backend a las claves que DataTable espera
@@ -59,7 +59,6 @@ function ClientManagement() {
       ...prev,
       [name]: value,
     }));
-    // Limpiar el error de ese campo cuando el usuario empieza a escribir
     setFormErrors(prev => ({
       ...prev,
       [name]: undefined
@@ -72,7 +71,6 @@ function ClientManagement() {
     if (!formData.nombre_cliente.trim()) errors.nombre_cliente = 'El nombre del cliente es obligatorio.';
     if (!formData.telefono_cliente.trim()) errors.telefono_cliente = 'El teléfono es obligatorio.';
     if (!formData.email_cliente.trim()) errors.email_cliente = 'El email es obligatorio.';
-    // Validación de formato de email simple
     if (formData.email_cliente.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email_cliente)) {
       errors.email_cliente = 'Formato de email inválido.';
     }
@@ -94,7 +92,6 @@ function ClientManagement() {
     setLoading(true);
 
     try {
-      // Usar las claves originales para enviar al backend
       const clientDataToSend = {
         nombre_cliente: formData.nombre_cliente,
         telefono_cliente: formData.telefono_cliente,
@@ -102,14 +99,14 @@ function ClientManagement() {
       };
 
       if (formData.id_cliente) {
-        await api.updateClient(formData.id_cliente, clientDataToSend);
+        await api.updateCliente(formData.id_cliente, clientDataToSend); // Usar updateCliente
         setMessage('Cliente actualizado exitosamente.');
       } else {
-        await api.addClient(clientDataToSend);
+        await api.addCliente(clientDataToSend); // Usar addCliente
         setMessage('Cliente añadido exitosamente.');
       }
-      await loadClients(); // Recargar la lista de clientes
-      clearForm(); // Limpiar el formulario
+      await loadClients(); 
+      clearForm(); 
     } catch (err) {
       console.error("Error al guardar cliente:", err);
       setError(`Error al guardar cliente: ${err.message}`);
@@ -119,7 +116,6 @@ function ClientManagement() {
     }
   };
 
-  // Limpia el formulario y los errores
   const clearForm = () => {
     setFormData({
       id_cliente: null,
@@ -130,42 +126,37 @@ function ClientManagement() {
     setFormErrors({});
   };
 
-  // Manejador para editar un cliente (precarga el formulario)
   const handleEdit = (client) => {
     setMessage('');
     setError(null);
     setFormErrors({});
-    // Rellenar el formulario con los datos del cliente, usando las claves mapeadas de la tabla
     setFormData({
       id_cliente: client['ID Cliente'],
       nombre_cliente: client['Nombre'],
       telefono_cliente: client['Teléfono'],
       email_cliente: client['Email'],
     });
-    // Desplazar la vista al inicio de la página al editar
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Manejador para activar el modal de confirmación de eliminación
   const confirmDeleteClient = (clientId) => {
     setClientToDelete(clientId);
     setShowDeleteConfirmModal(true);
   };
 
-  // Manejador para ejecutar la eliminación del cliente (se llama desde el modal)
   const executeDeleteClient = async () => {
     if (!clientToDelete) return;
 
     setMessage('');
     setError(null);
     setLoading(true);
-    setShowDeleteConfirmModal(false); // Cierra el modal inmediatamente
+    setShowDeleteConfirmModal(false); 
 
     try {
-      await api.deleteClient(clientToDelete);
+      await api.deleteCliente(clientToDelete); // Usar deleteCliente
       setMessage('Cliente eliminado exitosamente.');
-      await loadClients(); // Recargar la lista de clientes
-      setClientToDelete(null); // Limpiar el ID del cliente a eliminar
+      await loadClients(); 
+      setClientToDelete(null); 
     } catch (err) {
       console.error("Error al eliminar cliente:", err);
       if (err.message.includes('ORA-02292') || err.message.includes('child record found')) {
@@ -175,16 +166,14 @@ function ClientManagement() {
         setError(`Error al eliminar cliente: ${err.message}`);
         setMessage(`Error al eliminar: ${err.message}`);
       }
-      setClientToDelete(null); // Limpiar el ID del cliente a eliminar
+      setClientToDelete(null); 
     } finally {
       setLoading(false);
     }
   };
 
-  // Encabezados de la tabla para DataTable (la última columna para acciones)
-  const tableHeaders = ['ID Cliente', 'Nombre', 'Teléfono', 'Email', '']; // Último encabezado vacío para las acciones
+  const tableHeaders = ['ID Cliente', 'Nombre', 'Teléfono', 'Email', '']; 
 
-  // Renderizado Condicional de Estados
   if (loading && !clients.length && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 font-inter transition-colors duration-300">
@@ -219,7 +208,6 @@ function ClientManagement() {
         Gestión de Clientes
       </h1>
 
-      {/* Mensajes de éxito/error para el usuario */}
       {message && (
         <div className={`relative p-4 mb-6 rounded-lg ${message.includes('Error') || message.includes('¡Atención!') ? 'bg-red-100 text-red-800 border-red-500 dark:bg-red-900 dark:border-red-700 dark:text-red-200' : 'bg-green-100 text-green-800 border-green-500 dark:bg-green-900 dark:border-green-700 dark:text-green-200'} border shadow-md flex items-center justify-between transition-colors duration-300`}>
           <p className="font-semibold flex items-center">
@@ -236,7 +224,6 @@ function ClientManagement() {
         </div>
       )}
 
-      {/* Modal de confirmación de eliminación de cliente */}
       {showDeleteConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full transform transition-all duration-300 scale-100 animate-slide-in-up border border-red-200 dark:border-red-700">
@@ -298,7 +285,7 @@ function ClientManagement() {
           <div>
             <label htmlFor="telefono_cliente" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Teléfono:</label>
             <input
-              type="tel" // Tipo 'tel' para mejor semántica, la validación se mantiene con regex si es necesario
+              type="tel" 
               id="telefono_cliente"
               name="telefono_cliente"
               value={formData.telefono_cliente}
@@ -312,7 +299,7 @@ function ClientManagement() {
           <div>
             <label htmlFor="email_cliente" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Email:</label>
             <input
-              type="email" // Tipo 'email' para validación básica del navegador
+              type="email" 
               id="email_cliente"
               name="email_cliente"
               value={formData.email_cliente}
@@ -356,14 +343,13 @@ function ClientManagement() {
         </h2>
 
         <DataTable
-          title="" // El título se maneja por el h2 de arriba
+          title="" 
           data={clients}
           headers={tableHeaders}
-          keyAccessor="ID Cliente" // Usar la clave mapeada para el keyAccessor
+          keyAccessor="ID Cliente" 
           tableColorTheme="purple"
-          // Renderiza la última columna para las acciones de editar/eliminar
           renderCustomColumn={(row, header) => {
-            if (header === '') { // Usamos el encabezado vacío para esta columna
+            if (header === '') { 
               return (
                 <div className="flex space-x-2">
                   <button
@@ -374,7 +360,7 @@ function ClientManagement() {
                     <Edit className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={() => confirmDeleteClient(row['ID Cliente'])} // Llama al nuevo handler del modal usando la clave mapeada
+                    onClick={() => confirmDeleteClient(row['ID Cliente'])} 
                     className="p-2 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-md transition-colors duration-200"
                     title="Eliminar"
                   >
@@ -383,7 +369,7 @@ function ClientManagement() {
                 </div>
               );
             }
-            return undefined; // Para otras columnas, no se renderiza contenido personalizado
+            return undefined; 
           }}
         />
         {clients.length === 0 && !loading && !error && (

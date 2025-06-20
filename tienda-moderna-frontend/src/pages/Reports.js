@@ -1,27 +1,25 @@
 // src/pages/Reports.js
 import React, { useState, useEffect } from 'react';
-import api from '../Api'; // Asegúrate de que esta importación sea correcta
-import DataTable from '../components/DataTable';
-import { FileText, Loader2, AlertTriangle, RefreshCcw, XCircle, CheckCircle2, Calendar, DollarSign, ListChecks } from 'lucide-react'; // Nuevos iconos para reportes y estados
+import api from '../Api'; 
+import DataTable from '../components/DataTable'; // <--- ¡Asegúrate que esta importación es CORRECTA!
+import { FileText, Loader2, AlertTriangle, RefreshCcw, XCircle, CheckCircle2, Calendar, DollarSign, ListChecks } from 'lucide-react'; 
 
 function Reports() {
   const [topProducts, setTopProducts] = useState([]);
   const [totalByProvider, setTotalByProvider] = useState([]);
   const [topBuyers, setTopBuyers] = useState([]);
-  const [dailyCashReport, setDailyCashReport] = useState([]); // Nuevo estado para el reporte de caja diario
-  const [detailedSalesReport, setDetailedSalesReport] = useState([]); // Nuevo estado para el reporte detallado
+  const [dailyCashReport, setDailyCashReport] = useState([]); 
+  const [detailedSalesReport, setDetailedSalesReport] = useState([]); 
   
-  const [startDate, setStartDate] = useState(''); // Estado para la fecha de inicio del reporte detallado
-  const [endDate, setEndDate] = useState('');     // Estado para la fecha fin del reporte detallado
-  const [showDetailedReportResults, setShowDetailedReportResults] = useState(false); // Controla la visibilidad de la tabla detallada
+  const [startDate, setStartDate] = useState(''); 
+  const [endDate, setEndDate] = useState('');     
+  const [showDetailedReportResults, setShowDetailedReportResults] = useState(false); 
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [message, setMessage] = useState(''); // Para mensajes de éxito/error
-  const [loadingDailyReport, setLoadingDailyReport] = useState(false); // Nuevo estado para la carga del reporte diario
+  const [message, setMessage] = useState(''); 
+  const [loadingDailyReport, setLoadingDailyReport] = useState(false); 
 
-  // Función para cargar todos los reportes iniciales (Top Productos, Proveedores, Clientes)
-  // El reporte diario se cargará por separado con su propio botón
   const loadInitialReports = async () => {
     setLoading(true);
     setError(null);
@@ -49,15 +47,12 @@ function Reports() {
     }
   };
 
-  // NUEVA FUNCIÓN: Para cargar solo el corte de caja diario
   const loadDailyCashReport = async () => {
     setLoadingDailyReport(true);
     setError(null); 
     setMessage('');
     try {
       const data = await api.fetchCorteCajaDiario();
-      // CORRECCIÓN CLAVE: Aplanar el array completamente usando flat(Infinity)
-      // Esto asegura que si viene [[{...}]] o [[[{...}]]] siempre se convierta a [{...}]
       const flattenedData = data ? data.flat(Infinity) : []; 
       setDailyCashReport(flattenedData);
       console.log("Datos recibidos para Corte de Caja Diario (aplanados):", flattenedData); 
@@ -66,14 +61,12 @@ function Reports() {
       console.error("Error al cargar corte de caja diario:", err);
       setError(`Error al cargar corte de caja diario: ${err.message}.`);
       setMessage(`Error al generar corte de caja: ${err.message}`);
-      setDailyCashReport([]); // Limpiar datos si hay error
+      setDailyCashReport([]); 
     } finally {
       setLoadingDailyReport(false);
     }
   };
 
-
-  // Función para cargar el reporte detallado de ventas por intervalo de tiempo
   const loadDetailedSalesReport = async () => {
     setMessage('');
     setError(null);
@@ -92,13 +85,13 @@ function Reports() {
     try {
       const detailedData = await api.fetchDetailedSalesReport(startDate, endDate);
       setDetailedSalesReport(detailedData);
-      setShowDetailedReportResults(true); // Mostrar la tabla solo si se cargan datos
+      setShowDetailedReportResults(true); 
       setMessage('Reporte detallado generado exitosamente.');
     } catch (err) {
       console.error("Error al cargar reporte detallado:", err);
       setError(`Error al cargar reporte detallado: ${err.message}.`);
       setMessage(`Error al generar reporte: ${err.message}`);
-      setDetailedSalesReport([]); // Limpiar datos si hay error
+      setDetailedSalesReport([]); 
       setShowDetailedReportResults(false);
     } finally {
       setLoading(false);
@@ -108,11 +101,9 @@ function Reports() {
 
   useEffect(() => {
     loadInitialReports();
-    // Cargar el reporte diario al inicio también, para que no esté vacío inicialmente
     loadDailyCashReport(); 
   }, []);
 
-  // Renderizado Condicional de Estados
   if (loading && !error && !showDetailedReportResults) { 
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 font-inter transition-colors duration-300">
@@ -122,7 +113,6 @@ function Reports() {
     );
   }
 
-  // El error general solo se muestra si todos los reportes iniciales fallan
   if (error && (!topProducts.length && !totalByProvider.length && !topBuyers.length && !detailedSalesReport.length && !loadingDailyReport)) {
     return (
       <div className="flex items-center justify-center flex-col min-h-screen bg-red-100 text-red-700 p-8 font-inter rounded-xl shadow-xl
@@ -148,7 +138,6 @@ function Reports() {
         Reportes y Análisis
       </h1>
 
-      {/* Mensajes de éxito/error para el usuario */}
       {message && (
         <div className={`relative p-4 mb-6 rounded-lg ${message.includes('Error') || message.includes('¡Atención!') ? 'bg-red-100 text-red-800 border-red-500 dark:bg-red-900 dark:border-red-700 dark:text-red-200' : 'bg-green-100 text-green-800 border-green-500 dark:bg-green-900 dark:border-green-700 dark:text-green-200'} border shadow-md flex items-center justify-between transition-colors duration-300`}>
           <p className="font-semibold flex items-center">
@@ -183,7 +172,7 @@ function Reports() {
           </button>
           <DataTable
             title="" 
-            data={dailyCashReport} // Ahora dailyCashReport es un array plano
+            data={dailyCashReport}
             headers={['Fecha', 'Total Efectivo']} 
             keyAccessor="Fecha" 
             tableColorTheme="green"
@@ -285,4 +274,3 @@ function Reports() {
 }
 
 export default Reports;
-  
