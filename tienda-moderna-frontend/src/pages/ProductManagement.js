@@ -1,233 +1,303 @@
 // src/pages/ProductManagement.js
 import React, { useState, useEffect } from 'react';
-import * as api from '../Api'; // Importa todas las funciones desde tu Api.js
-import { Package, Pencil, Trash2, XCircle, PlusCircle, Save, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react'; // Iconos para la UI
+import api from '../Api'; // Asegúrate de que esta importación sea correcta
+import DataTable from '../components/DataTable';
+import { Package, PlusCircle, Edit, Trash2, Loader2, AlertTriangle, XCircle, CheckCircle2, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react'; // Iconos
 
 function ProductManagement() {
   const [products, setProducts] = useState([]);
-  const [formData, setFormData] = useState({
-    NAME: '',
-    DESCRIPTION: '',
-    PRICE: '',
-    STOCK: '',
-    EXPIRYDATE: '',
-    SUPPLIERID: '',
-    IMAGEURL: '',
-    BARCODE: '',
-    CATEGORYID: '',
-  });
-  const [editingId, setEditingId] = useState(null);
-  const [loading, setLoading] = useState(true); // Para la carga inicial
-  const [isSubmitting, setIsSubmitting] = useState(false); // Para el envío del formulario
+  const [providers, setProviders] = useState([]);
+  const [categories, setCategories] = useState([]); // Estado para las categorías
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [message, setMessage] = useState(''); // Para mensajes de éxito/error al usuario
-  const [formErrors, setFormErrors] = useState({}); // Para errores de validación del formulario
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false); // Estado para la modal de confirmación de eliminación
-  const [productToDelete, setProductToDelete] = useState(null); // Producto a eliminar
+  const [message, setMessage] = useState('');
 
-  // useEffect para cargar los productos cuando el componente se monta
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  // Estados del formulario
+  const [formData, setFormData] = useState({
+    id_producto: null,
+    nombre_producto: '',
+    descripcion_producto: '',
+    precio_venta_unitario: '',
+    precio_compra_unitario: '',
+    fecha_caducidad: '',
+    stock_actual: '',
+    imagen_url: '',
+    id_proveedor: '',
+    id_categoria: ''
+  });
 
-  // Función para obtener todos los productos del backend
-  const fetchProducts = async () => {
+  // Estado para errores de validación del formulario
+  const [formErrors, setFormErrors] = useState({});
+
+  // Estados para paginación y filtro de categorías
+  const [currentPage, setCurrentPage] = useState(1);
+  const [productsPerPage] = useState(10); // Mostrar 10 productos por página
+  const [selectedCategory, setSelectedCategory] = useState(null); // null para "Todas las categorías"
+
+  // NUEVOS ESTADOS para el modal de confirmación de eliminación
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null); // ID del producto a eliminar
+
+  // Función para cargar productos, proveedores y categorías
+  const loadAllData = async () => {
+    setLoading(true);
+    setError(null);
+    setMessage('');
     try {
-      setLoading(true);
-      setError(null); // Limpia cualquier error previo
-      const res = await api.getProducts();
-      setProducts(res.data);
-      setLoading(false);
+      const [productsData, providersData, categoriesData] = await Promise.all([
+        api.fetchProducts(),
+        api.fetchProveedores(),
+        api.fetchCategories()
+      ]);
+
+      // CORRECCIÓN CLAVE: Mapear los datos de productos para que las claves coincidan con los encabezados del DataTable
+      const mappedProducts = productsData.map(p => ({
+        'ID': p.id_producto,
+        'Nombre': p.nombre_producto,
+        'Descripción': p.descripcion_producto,
+        'P. Venta': p.precio_venta_unitario,
+        'P. Compra': p.precio_compra_unitario,
+        'Caducidad': p.fecha_caducidad ? new Date(p.fecha_caducidad).toISOString().split('T')[0] : '', // Asegura formato YYYY-MM-DD
+        'Stock': p.stock_actual,
+        'Imagen URL': p.imagen_url,
+        'ID Proveedor': p.id_proveedor,
+        'ID Categoría': p.id_categoria
+      }));
+
+      setProducts(mappedProducts); // Ahora `products` tiene las claves que DataTable espera
+      setProviders(providersData);
+      // Añade una opción "Todas las categorías" al inicio
+      setCategories([{ ID: null, NAME: 'Todas las Categorías' }, ...categoriesData]);
+      
     } catch (err) {
-      console.error("Error al obtener productos:", err);
-      setError(`Error al cargar los productos: ${err.message}. Asegúrate de que el backend esté funcionando correctamente y la base de datos sea accesible.`);
+      console.error("Error al cargar datos iniciales:", err);
+      setError(`Error al cargar datos: ${err.message}. Asegúrate de que el backend esté corriendo y las tablas de Proveedores y Categorías tengan datos.`);
+    } finally {
       setLoading(false);
     }
   };
 
-  // Manejador de cambios para los campos del formulario
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  // Manejador de cambios en el formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    // Limpia el error de ese campo tan pronto como el usuario empieza a escribir
-    if (formErrors[name]) {
-      setFormErrors(prev => ({ ...prev, [name]: null }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+    setFormErrors(prev => ({
+      ...prev,
+      [name]: undefined
+    }));
   };
 
   // Función de validación del formulario
   const validateForm = () => {
     const errors = {};
-    if (!formData.NAME || formData.NAME.trim() === '') {
-        errors.NAME = 'El nombre es requerido.';
-    }
-
-    const price = parseFloat(formData.PRICE);
-    if (isNaN(price) || price <= 0) {
-        errors.PRICE = 'El precio debe ser un número positivo.';
-    }
-
-    const stock = parseInt(formData.STOCK);
-    if (isNaN(stock) || stock < 0) {
-        errors.STOCK = 'El stock debe ser un número entero no negativo.';
-    }
-
-    const supplierId = parseInt(formData.SUPPLIERID);
-    if (isNaN(supplierId) || supplierId <= 0) {
-        errors.SUPPLIERID = 'El ID de proveedor es requerido y debe ser un número positivo.';
-    }
-
-    const categoryId = parseInt(formData.CATEGORYID);
-    if (isNaN(categoryId) || categoryId <= 0) {
-        errors.CATEGORYID = 'El ID de categoría es requerido y debe ser un número positivo.';
+    if (!formData.nombre_producto.trim()) errors.nombre_producto = 'El nombre es obligatorio.';
+    if (isNaN(parseFloat(formData.precio_venta_unitario)) || parseFloat(formData.precio_venta_unitario) <= 0) errors.precio_venta_unitario = 'Debe ser un número positivo.';
+    if (formData.precio_compra_unitario !== '' && (isNaN(parseFloat(formData.precio_compra_unitario)) || parseFloat(formData.precio_compra_unitario) < 0)) errors.precio_compra_unitario = 'Debe ser un número positivo o cero.';
+    if (isNaN(parseInt(formData.stock_actual)) || parseInt(formData.stock_actual) < 0) errors.stock_actual = 'Debe ser un número entero positivo o cero.';
+    if (!formData.id_proveedor) errors.id_proveedor = 'Selecciona un proveedor.';
+    if (!formData.id_categoria) errors.id_categoria = 'Selecciona una categoría.';
+    
+    if (formData.fecha_caducidad && !/^\d{4}-\d{2}-\d{2}$/.test(formData.fecha_caducidad)) {
+      errors.fecha_caducidad = 'Formato de fecha inválido (YYYY-MM-DD).';
     }
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  // Manejador para el envío del formulario (agregar o actualizar producto)
+  // Manejador para enviar el formulario (añadir o editar)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(''); // Limpia mensajes anteriores
-    setError(null); // Limpia errores generales
-
+    setMessage('');
+    setError(null);
+    
     if (!validateForm()) {
-      setMessage('Error: Por favor, corrige los campos marcados en el formulario.');
+      setMessage('Error: Por favor, corrige los campos marcados.');
       return;
     }
 
-    setIsSubmitting(true); // Iniciar carga para la operación de envío
+    setLoading(true);
+
     try {
-      const dataToSend = {
-          BARCODE: formData.BARCODE || null,
-          NAME: formData.NAME,
-          DESCRIPTION: formData.DESCRIPTION || null,
-          UNITMEASURE: 'Unidad', 
-          PURCHASEPRICE: 0, 
-          PRICE: parseFloat(formData.PRICE),
-          STOCK: parseInt(formData.STOCK),
-          MINSTOCK: 0, 
-          EXPIRYDATE: formData.EXPIRYDATE || null,
-          SUPPLIERID: parseInt(formData.SUPPLIERID),
-          IMAGEURL: formData.IMAGEURL || null,
-          CATEGORYID: parseInt(formData.CATEGORYID),
-          ACTIVE: 1 
+      const productDataToSend = {
+        nombre_producto: formData.nombre_producto,
+        descripcion_producto: formData.descripcion_producto,
+        precio_venta_unitario: parseFloat(formData.precio_venta_unitario),
+        precio_compra_unitario: formData.precio_compra_unitario !== '' ? parseFloat(formData.precio_compra_unitario) : null,
+        fecha_caducidad: formData.fecha_caducidad || null,
+        stock_actual: parseInt(formData.stock_actual),
+        imagen_url: formData.imagen_url || null,
+        id_proveedor: parseInt(formData.id_proveedor),
+        id_categoria: parseInt(formData.id_categoria)
       };
 
-      if (editingId) {
-        await api.updateProduct(editingId, dataToSend);
+      if (formData.id_producto) {
+        await api.updateProduct(formData.id_producto, productDataToSend);
         setMessage('Producto actualizado exitosamente.');
       } else {
-        await api.addProduct(dataToSend);
-        setMessage('Producto agregado exitosamente.');
+        await api.addProduct(productDataToSend);
+        setMessage('Producto añadido exitosamente.');
       }
-      setFormData({
-        NAME: '', DESCRIPTION: '', PRICE: '', STOCK: '', EXPIRYDATE: '', SUPPLIERID: '', IMAGEURL: '', BARCODE: '', CATEGORYID: ''
-      });
-      setEditingId(null);
-      setFormErrors({}); // Limpiar errores de formulario
-      fetchProducts();
+      await loadAllData();
+      clearForm();
     } catch (err) {
       console.error("Error al guardar producto:", err);
-      setMessage(`Error al guardar: ${err.response?.data?.message || err.message}. Verifica los datos ingresados.`);
+      setError(`Error al guardar producto: ${err.message}`);
+      setMessage(`Error al guardar: ${err.message}`);
     } finally {
-        setIsSubmitting(false); // Finalizar carga
+      setLoading(false);
     }
   };
 
-  // Manejador para cuando se hace clic en el botón "Editar" de un producto
-  const handleEdit = (product) => {
-    setEditingId(product.ID);
+  // Limpia el formulario y los errores
+  const clearForm = () => {
     setFormData({
-      NAME: product.NAME ?? '',
-      DESCRIPTION: product.DESCRIPTION ?? '',
-      PRICE: product.PRICE ?? '', 
-      STOCK: product.STOCK ?? '', 
-      EXPIRYDATE: product.EXPIRYDATE ? new Date(product.EXPIRYDATE).toISOString().split('T')[0] : '',
-      SUPPLIERID: product.SUPPLIERID ?? '',
-      IMAGEURL: product.IMAGEURL ?? '',
-      BARCODE: product.BARCODE ?? '',
-      CATEGORYID: product.CATEGORYID ?? '',
+      id_producto: null,
+      nombre_producto: '',
+      descripcion_producto: '',
+      precio_venta_unitario: '',
+      precio_compra_unitario: '',
+      fecha_caducidad: '',
+      stock_actual: '',
+      imagen_url: '',
+      id_proveedor: '',
+      id_categoria: ''
     });
-    setFormErrors({}); // Limpiar errores al editar
-    setMessage(''); // Limpiar mensajes de estado
+    setFormErrors({});
   };
 
-  // Prepara la modal de confirmación para eliminar
-  const confirmDelete = (product) => {
-    setProductToDelete(product);
-    setShowDeleteConfirmation(true);
-  };
-
-  // Manejador para eliminar un producto (ejecuta después de la confirmación)
-  const handleDelete = async () => {
-    if (!productToDelete) return; // Si no hay producto para eliminar, salir
-
-    setShowDeleteConfirmation(false); // Cierra la modal
-    setIsSubmitting(true); // Activa el estado de carga
+  // Manejador para editar un producto
+  const handleEdit = (product) => {
     setMessage('');
     setError(null);
+    setFormErrors({});
+    // Al editar, usa las claves mapeadas de la tabla para rellenar el formulario
+    setFormData({
+      id_producto: product['ID'],
+      nombre_producto: product['Nombre'],
+      descripcion_producto: product['Descripción'],
+      precio_venta_unitario: product['P. Venta'],
+      precio_compra_unitario: product['P. Compra'],
+      fecha_caducidad: product['Caducidad'], // Ya está en formato YYYY-MM-DD
+      stock_actual: product['Stock'],
+      imagen_url: product['Imagen URL'],
+      id_proveedor: product['ID Proveedor'],
+      id_categoria: product['ID Categoría']
+    });
+    // Desplazar la vista al inicio de la página al editar
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Manejador para activar el modal de confirmación de eliminación de producto
+  const confirmDeleteProduct = (productId) => {
+    setProductToDelete(productId);
+    setShowDeleteConfirmModal(true);
+  };
+
+  // Manejador para ejecutar la eliminación del producto (se llama desde el modal)
+  const executeDeleteProduct = async () => {
+    if (!productToDelete) return;
+
+    setMessage('');
+    setError(null);
+    setLoading(true);
+    setShowDeleteConfirmModal(false); // Cierra el modal inmediatamente
+
     try {
-      await api.deleteProduct(productToDelete.ID);
+      await api.deleteProduct(productToDelete);
       setMessage('Producto eliminado exitosamente.');
-      fetchProducts();
+      await loadAllData(); // Recargar la lista de productos y otros datos
+      setProductToDelete(null); // Limpiar el ID del producto a eliminar
     } catch (err) {
       console.error("Error al eliminar producto:", err);
-      setMessage(`Error al eliminar: ${err.response?.data?.message || err.message}`);
+      if (err.message.includes('ORA-02292') || err.message.includes('child record found')) {
+        setError(`No se puede eliminar el producto con ID ${productToDelete} porque está asociado a ventas existentes.`);
+        setMessage(`Error: No se puede eliminar el producto (ID: ${productToDelete}). Está asociado a ventas.`);
+      } else {
+        setError(`Error al eliminar producto: ${err.message}`);
+        setMessage(`Error al eliminar: ${err.message}`);
+      }
+      setProductToDelete(null); // Limpiar el ID del producto a eliminar
     } finally {
-      setIsSubmitting(false); // Desactiva el estado de carga
-      setProductToDelete(null); // Resetea el producto a eliminar
+      setLoading(false);
     }
   };
 
-  // Renderizado condicional basado en el estado de carga y error
-  if (loading && products.length === 0 && !error) { // Mostrar spinner solo en la carga inicial
+
+  // Filtrado de productos por categoría
+  const filteredProducts = selectedCategory
+    ? products.filter(p => p['ID Categoría'] === selectedCategory) // Usar la clave mapeada
+    : products;
+
+  // Paginación
+  const indexOfLastProduct = currentPage * productsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
+  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  // Reiniciar la paginación al cambiar de categoría
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory]);
+
+  // Encabezados de la tabla para DataTable (la última columna para acciones)
+  const tableHeaders = [
+    'ID', 'Nombre', 'Descripción', 'P. Venta', 'P. Compra', 'Caducidad', 'Stock', 'Imagen URL', 'ID Proveedor', 'ID Categoría', '' // Encabezado vacío para "Acciones"
+  ];
+
+  if (loading && !products.length && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 font-inter transition-colors duration-300">
         <Loader2 className="animate-spin w-16 h-16 text-blue-500 dark:text-blue-400" />
-        <p className="ml-4 text-xl font-semibold text-gray-700 dark:text-gray-300">Cargando productos...</p>
+        <p className="ml-4 text-xl font-semibold text-gray-700 dark:text-gray-300">Cargando gestión de productos...</p>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !products.length) {
     return (
-      <div className="text-center p-8 bg-red-100 border border-red-400 text-red-700 rounded-lg shadow-md min-h-screen flex flex-col justify-center items-center font-inter
-                  dark:bg-red-900 dark:border-red-700 dark:text-red-200 transition-colors duration-300">
-        <XCircle className="w-20 h-20 text-red-600 dark:text-red-400 mb-6" />
-        <h2 className="text-3xl font-bold mb-4">Error al Cargar Productos</h2>
-        <p className="mb-6 text-xl">{error}</p>
+      <div className="flex items-center justify-center flex-col min-h-screen bg-red-100 text-red-700 p-8 font-inter rounded-xl shadow-xl
+                    dark:bg-red-900 dark:text-red-200 dark:border-red-700 transition-colors duration-300">
+        <AlertTriangle className="w-20 h-20 text-red-600 dark:text-red-400 mb-6" />
+        <h2 className="text-3xl font-bold mb-4">Error de Carga</h2>
+        <p className="text-xl font-semibold text-center mb-6">{error}</p>
         <button
-            onClick={fetchProducts} // Permite reintentar la carga
-            className="px-8 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors duration-300 shadow-lg transform hover:scale-105
-                       dark:bg-blue-700 dark:hover:bg-blue-600 dark:text-gray-100"
+          onClick={loadAllData}
+          className="px-8 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all duration-300 shadow-lg transform hover:scale-105 flex items-center gap-2 text-lg
+                    dark:bg-blue-700 dark:hover:bg-blue-600 dark:text-gray-100"
         >
-            Reintentar Carga
+          <RefreshCcw className="w-5 h-5"/> Reintentar Carga
         </button>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-8 bg-white rounded-xl shadow-2xl font-inter
-                    dark:bg-gray-800 dark:text-gray-100 transition-colors duration-300">
-      <h2 className="text-4xl font-extrabold mb-8 text-blue-800 text-center tracking-tight flex items-center justify-center gap-3
-                     dark:text-blue-400 transition-colors duration-300">
-        <Package className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+    <div className="min-h-screen bg-gray-50 p-6 sm:p-8 lg:p-10 font-inter dark:bg-gray-900 transition-colors duration-300">
+      <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 dark:text-blue-300 mb-12 text-center drop-shadow-lg animate-fade-in-down">
+        <Package className="inline-block w-10 h-10 sm:w-12 sm:h-12 mr-4 text-green-500 dark:text-green-400"/>
         Gestión de Productos
-      </h2>
+      </h1>
 
-      {/* Área para mensajes de éxito o error */}
+      {/* Mensajes de éxito/error para el usuario */}
       {message && (
-        <div className={`relative p-4 mb-6 rounded-lg ${message.startsWith('Error') ? 'bg-red-100 text-red-800 border-red-500 dark:bg-red-900 dark:border-red-700 dark:text-red-200' : 'bg-green-100 text-green-800 border-green-500 dark:bg-green-900 dark:border-green-700 dark:text-green-200'} border shadow-md flex items-center justify-between transition-colors duration-300`}>
+        <div className={`relative p-4 mb-6 rounded-lg ${message.includes('Error') || message.includes('¡Atención!') ? 'bg-red-100 text-red-800 border-red-500 dark:bg-red-900 dark:border-red-700 dark:text-red-200' : 'bg-green-100 text-green-800 border-green-500 dark:bg-green-900 dark:border-green-700 dark:text-green-200'} border shadow-md flex items-center justify-between transition-colors duration-300`}>
           <p className="font-semibold flex items-center">
-            {message.startsWith('Error') ? <XCircle className="w-5 h-5 mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
+            {message.includes('Error') || message.includes('¡Atención!') ? <AlertTriangle className="w-5 h-5 mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
             {message}
           </p>
           <button
             onClick={() => setMessage('')}
-            className={`text-gray-600 hover:text-gray-800 transition-colors duration-200 dark:text-gray-400 dark:hover:text-gray-100`}
+            className="text-gray-600 hover:text-gray-800 transition-colors duration-200 dark:text-gray-400 dark:hover:text-gray-100"
             aria-label="Cerrar mensaje"
           >
             <XCircle className="w-5 h-5" />
@@ -235,191 +305,267 @@ function ProductManagement() {
         </div>
       )}
 
-      {/* Modal de confirmación de eliminación */}
-      {showDeleteConfirmation && productToDelete && (
+      {/* Modal de confirmación de eliminación de producto */}
+      {showDeleteConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-red-50 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full transform transition-all duration-300 scale-100 animate-slide-in-up
-                          dark:from-gray-900 dark:to-gray-800 dark:border-red-700 dark:text-gray-100">
+          <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full transform transition-all duration-300 scale-100 animate-slide-in-up border border-red-200 dark:border-red-700">
             <AlertTriangle className="w-20 h-20 text-red-500 mx-auto mb-6 drop-shadow-lg dark:text-red-400" />
-            <h3 className="text-3xl font-extrabold text-gray-800 mb-3 dark:text-gray-100">Confirmar Eliminación</h3>
-            <p className="text-gray-700 text-lg mb-8 leading-relaxed dark:text-gray-200">
-              ¿Estás seguro de que quieres eliminar el producto "<span className="font-bold">{productToDelete.NAME}</span>"? Esta acción no se puede deshacer.
+            <h3 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100 mb-3">¿Estás seguro?</h3>
+            <p className="text-gray-700 dark:text-gray-200 text-lg mb-8 leading-relaxed">
+              Estás a punto de eliminar el producto con ID: <span className="font-bold">{productToDelete}</span>. Esta acción no se puede deshacer y podría fallar si el producto ya ha sido vendido.
             </p>
             <div className="flex justify-center gap-4">
               <button
-                onClick={handleDelete}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 text-lg flex items-center gap-2
-                           dark:bg-red-700 dark:hover:bg-red-600 dark:text-gray-100"
-                disabled={isSubmitting}
+                onClick={() => setShowDeleteConfirmModal(false)}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-8 rounded-full transition-all duration-300 shadow-md hover:shadow-lg dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-100"
               >
-                {isSubmitting ? (
+                Cancelar
+              </button>
+              <button
+                onClick={executeDeleteProduct}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2 text-lg dark:bg-red-700 dark:hover:bg-red-600"
+                disabled={loading}
+              >
+                {loading ? (
                   <>
-                    <Loader2 className="animate-spin w-5 h-5" /> Eliminando...
+                    <Loader2 className="animate-spin inline-block w-5 h-5" />
+                    Eliminando...
                   </>
                 ) : (
                   <>
-                    <Trash2 className="w-5 h-5" /> Sí, Eliminar
+                    <Trash2 className="w-5 h-5" /> Eliminar
                   </>
                 )}
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirmation(false)}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-8 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 text-lg
-                           dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100"
-                disabled={isSubmitting}
-              >
-                Cancelar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Formulario de Producto */}
-      <div className="mb-10 p-8 bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl shadow-lg
-                      dark:from-indigo-950 dark:to-indigo-800 dark:border-indigo-700 transition-colors duration-300">
-        <h3 className="text-2xl font-bold mb-5 text-indigo-800 flex items-center dark:text-indigo-300">
-          {editingId ? <Pencil className="w-8 h-8 mr-3 text-indigo-600 dark:text-indigo-400" /> : <PlusCircle className="w-8 h-8 mr-3 text-indigo-600 dark:text-indigo-400" />}
-          {editingId ? 'Editar Producto Existente' : 'Agregar Nuevo Producto'}
-        </h3>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Formulario de Añadir/Editar Producto */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 mb-10 border border-blue-100 dark:border-blue-700">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
+          {formData.id_producto ? <Edit className="w-7 h-7 text-purple-600 dark:text-purple-400" /> : <PlusCircle className="w-7 h-7 text-green-600 dark:text-green-400" />}
+          {formData.id_producto ? `Editar Producto: ${formData.nombre_producto}` : 'Añadir Nuevo Producto'}
+        </h2>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Nombre del Producto */}
           <div>
-            <label htmlFor="NAME" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Nombre:<span className="text-red-500">*</span></label>
-            <input type="text" id="NAME" name="NAME" value={formData.NAME} onChange={handleChange} required
-                   className={`shadow-inner appearance-none border ${formErrors.NAME ? 'border-red-500' : 'border-gray-300'} rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                               dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300`} />
-            {formErrors.NAME && <p className="text-red-500 text-xs italic mt-1">{formErrors.NAME}</p>}
+            <label htmlFor="nombre_producto" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Nombre del Producto:</label>
+            <input
+              type="text"
+              id="nombre_producto"
+              name="nombre_producto"
+              value={formData.nombre_producto}
+              onChange={handleChange}
+              required
+              className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.nombre_producto ? 'border-red-500' : ''}`}
+            />
+            {formErrors.nombre_producto && <p className="text-red-500 text-xs italic mt-1">{formErrors.nombre_producto}</p>}
           </div>
+          {/* Descripción */}
           <div>
-            <label htmlFor="DESCRIPTION" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Descripción:</label>
-            <input type="text" id="DESCRIPTION" name="DESCRIPTION" value={formData.DESCRIPTION} onChange={handleChange}
-                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
+            <label htmlFor="descripcion_producto" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Descripción:</label>
+            <input
+              type="text"
+              id="descripcion_producto"
+              name="descripcion_producto"
+              value={formData.descripcion_producto}
+              onChange={handleChange}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
           </div>
+          {/* Precio Venta Unitario */}
           <div>
-            <label htmlFor="PRICE" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Precio:<span className="text-red-500">*</span></label>
-            <input type="number" id="PRICE" name="PRICE" value={formData.PRICE} onChange={handleChange} required min="0" step="0.01"
-                   className={`shadow-inner appearance-none border ${formErrors.PRICE ? 'border-red-500' : 'border-gray-300'} rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                               dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300`} />
-            {formErrors.PRICE && <p className="text-red-500 text-xs italic mt-1">{formErrors.PRICE}</p>}
+            <label htmlFor="precio_venta_unitario" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Precio Venta Unitario:</label>
+            <input
+              type="number"
+              step="0.01"
+              id="precio_venta_unitario"
+              name="precio_venta_unitario"
+              value={formData.precio_venta_unitario}
+              onChange={handleChange}
+              required
+              className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.precio_venta_unitario ? 'border-red-500' : ''}`}
+            />
+            {formErrors.precio_venta_unitario && <p className="text-red-500 text-xs italic mt-1">{formErrors.precio_venta_unitario}</p>}
           </div>
+          {/* Precio Compra Unitario */}
           <div>
-            <label htmlFor="STOCK" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Stock:<span className="text-red-500">*</span></label>
-            <input type="number" id="STOCK" name="STOCK" value={formData.STOCK} onChange={handleChange} required min="0"
-                   className={`shadow-inner appearance-none border ${formErrors.STOCK ? 'border-red-500' : 'border-gray-300'} rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                               dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300`} />
-            {formErrors.STOCK && <p className="text-red-500 text-xs italic mt-1">{formErrors.STOCK}</p>}
+            <label htmlFor="precio_compra_unitario" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Precio Compra Unitario:</label>
+            <input
+              type="number"
+              step="0.01"
+              id="precio_compra_unitario"
+              name="precio_compra_unitario"
+              value={formData.precio_compra_unitario}
+              onChange={handleChange}
+              className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.precio_compra_unitario ? 'border-red-500' : ''}`}
+            />
+            {formErrors.precio_compra_unitario && <p className="text-red-500 text-xs italic mt-1">{formErrors.precio_compra_unitario}</p>}
           </div>
+          {/* Fecha de Caducidad */}
           <div>
-            <label htmlFor="EXPIRYDATE" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Fecha Caducidad:</label>
-            <input type="date" id="EXPIRYDATE" name="EXPIRYDATE" value={formData.EXPIRYDATE} onChange={handleChange}
-                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
+            <label htmlFor="fecha_caducidad" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Fecha de Caducidad:</label>
+            <input
+              type="date"
+              id="fecha_caducidad"
+              name="fecha_caducidad"
+              value={formData.fecha_caducidad}
+              onChange={handleChange}
+              className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.fecha_caducidad ? 'border-red-500' : ''}`}
+            />
+            {formErrors.fecha_caducidad && <p className="text-red-500 text-xs italic mt-1">{formErrors.fecha_caducidad}</p>}
           </div>
+          {/* Stock Actual */}
           <div>
-            <label htmlFor="SUPPLIERID" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">ID Proveedor:<span className="text-red-500">*</span></label>
-            <input type="number" id="SUPPLIERID" name="SUPPLIERID" value={formData.SUPPLIERID} onChange={handleChange} required
-                   className={`shadow-inner appearance-none border ${formErrors.SUPPLIERID ? 'border-red-500' : 'border-gray-300'} rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                               dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300`} />
-            {formErrors.SUPPLIERID && <p className="text-red-500 text-xs italic mt-1">{formErrors.SUPPLIERID}</p>}
+            <label htmlFor="stock_actual" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Stock Actual:</label>
+            <input
+              type="number"
+              id="stock_actual"
+              name="stock_actual"
+              value={formData.stock_actual}
+              onChange={handleChange}
+              required
+              className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.stock_actual ? 'border-red-500' : ''}`}
+            />
+            {formErrors.stock_actual && <p className="text-red-500 text-xs italic mt-1">{formErrors.stock_actual}</p>}
           </div>
+          {/* URL de Imagen */}
           <div>
-            <label htmlFor="IMAGEURL" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">URL Imagen:</label>
-            <input type="text" id="IMAGEURL" name="IMAGEURL" value={formData.IMAGEURL} onChange={handleChange}
-                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
+            <label htmlFor="imagen_url" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">URL de Imagen:</label>
+            <input
+              type="text"
+              id="imagen_url"
+              name="imagen_url"
+              value={formData.imagen_url}
+              onChange={handleChange}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
           </div>
+          {/* ID Proveedor */}
           <div>
-            <label htmlFor="BARCODE" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">Código de Barras:</label>
-            <input type="text" id="BARCODE" name="BARCODE" value={formData.BARCODE} onChange={handleChange}
-                   className="shadow-inner appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                              dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300" />
+            <label htmlFor="id_proveedor" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Proveedor:</label>
+            <select
+              id="id_proveedor"
+              name="id_proveedor"
+              value={formData.id_proveedor}
+              onChange={handleChange}
+              required
+              className={`shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.id_proveedor ? 'border-red-500' : ''}`}
+            >
+              <option value="">Selecciona un proveedor</option>
+              {providers.map(provider => (
+                <option key={provider.id_proveedor} value={provider.id_proveedor}>
+                  {provider.nombre_proveedor} ({provider.empresa_proveedor})
+                </option>
+              ))}
+            </select>
+            {formErrors.id_proveedor && <p className="text-red-500 text-xs italic mt-1">{formErrors.id_proveedor}</p>}
           </div>
+          {/* ID Categoría */}
           <div>
-            <label htmlFor="CATEGORYID" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-200">ID Categoría:<span className="text-red-500">*</span></label>
-            <input type="number" id="CATEGORYID" name="CATEGORYID" value={formData.CATEGORYID} onChange={handleChange} required
-                   className={`shadow-inner appearance-none border ${formErrors.CATEGORYID ? 'border-red-500' : 'border-gray-300'} rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500
-                               dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 dark:focus:ring-indigo-400 transition-colors duration-300`} />
-            {formErrors.CATEGORYID && <p className="text-red-500 text-xs italic mt-1">{formErrors.CATEGORYID}</p>}
+            <label htmlFor="id_categoria" className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Categoría:</label>
+            <select
+              id="id_categoria"
+              name="id_categoria"
+              value={formData.id_categoria}
+              onChange={handleChange}
+              required
+              className={`shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${formErrors.id_categoria ? 'border-red-500' : ''}`}
+            >
+              <option value="">Selecciona una categoría</option>
+              {categories.filter(cat => cat.ID !== null).map(category => ( // Filtra la opción "Todas las Categorías" aquí
+                <option key={category.ID} value={category.ID}>
+                  {category.NAME}
+                </option>
+              ))}
+            </select>
+            {formErrors.id_categoria && <p className="text-red-500 text-xs italic mt-1">{formErrors.id_categoria}</p>}
           </div>
-          <div className="lg:col-span-3 flex justify-end mt-4 gap-4">
-            <button type="submit" disabled={isSubmitting || Object.keys(formErrors).some(key => formErrors[key])} 
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center
-                               dark:bg-blue-700 dark:hover:bg-blue-600 dark:text-gray-100">
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="animate-spin inline-block w-5 h-5 mr-2" /> {editingId ? 'Guardando...' : 'Agregando...'}
-                </>
-              ) : (
-                <>
-                  {editingId ? <Save className="w-5 h-5 mr-2" /> : <PlusCircle className="w-5 h-5 mr-2" />} {editingId ? 'Guardar Cambios' : 'Agregar Producto'}
-                </>
-              )}
+
+          {/* Botones del formulario */}
+          <div className="md:col-span-2 flex justify-end gap-4 mt-4">
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-2
+                           dark:bg-blue-700 dark:hover:bg-blue-600"
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="animate-spin w-5 h-5" /> : (formData.id_producto ? <Edit className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />)}
+              {loading ? 'Guardando...' : (formData.id_producto ? 'Actualizar Producto' : 'Añadir Producto')}
             </button>
-            {editingId && (
-              <button type="button" onClick={() => { setEditingId(null); setFormData({ NAME: '', DESCRIPTION: '', PRICE: '', STOCK: '', EXPIRYDATE: '', SUPPLIERID: '', IMAGEURL: '', BARCODE: '', CATEGORYID: '' }); setMessage(''); setFormErrors({}); }}
-                           className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 transition duration-300 transform hover:scale-105 flex items-center justify-center
-                                      dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100">
-                <XCircle className="w-5 h-5 mr-2" /> Cancelar Edición
+            {formData.id_producto && (
+              <button
+                type="button"
+                onClick={clearForm}
+                className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-full shadow-lg transition-all duration-300 flex items-center gap-2
+                                dark:bg-gray-600 dark:hover:bg-gray-500"
+              >
+                Limpiar Formulario
               </button>
             )}
           </div>
         </form>
       </div>
 
-      {/* Listado de Productos */}
-      <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-xl shadow-lg
-                      dark:from-gray-900 dark:to-gray-800 dark:border-gray-700 transition-colors duration-300">
-        <h3 className="text-2xl font-bold mb-5 text-gray-800 text-center flex items-center justify-center gap-3 dark:text-gray-200">
-          <Package className="w-8 h-8 text-gray-600 dark:text-gray-400" />
+      {/* Sección de Filtros y Tabla de Productos */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 border border-purple-100 dark:border-purple-700">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
+          <Package className="w-7 h-7 text-purple-600 dark:text-purple-400" />
           Listado de Productos
-        </h3>
-        {products.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
-            <table className="min-w-full bg-white dark:bg-gray-700 transition-colors duration-300">
-              <thead className="bg-gray-200 dark:bg-gray-600 transition-colors duration-300">
-                <tr>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">ID</th>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Nombre</th>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Precio</th>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Stock</th>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Caducidad</th>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Proveedor ID</th>
-                  <th className="py-4 px-4 border-b text-left text-sm font-semibold text-gray-700 uppercase dark:text-gray-200">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product, index) => (
-                  <tr key={product.ID || index} className={`hover:bg-gray-100 border-b border-gray-100
-                                                                   dark:hover:bg-gray-600 dark:border-gray-700
-                                                                   ${index % 2 === 0 ? 'bg-white dark:bg-gray-700' : 'bg-gray-50 dark:bg-gray-800'} transition-colors duration-300`}>
-                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">{product.ID || 'N/A'}</td>
-                    <td className="py-4 px-4 text-gray-800 text-base font-medium dark:text-gray-200">{product.NAME}</td>
-                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">${(product.PRICE || 0).toFixed(2)}</td>
-                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">{product.STOCK}</td>
-                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">
-                      {product.EXPIRYDATE ? new Date(product.EXPIRYDATE).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="py-4 px-4 text-gray-800 text-base dark:text-gray-200">{product.SUPPLIERID}</td>
-                    <td className="py-4 px-4 text-gray-800 flex space-x-3">
-                      <button onClick={() => handleEdit(product)}
-                              className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg text-sm shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75 transition duration-300 transform hover:scale-105 flex items-center justify-center
-                                         dark:bg-yellow-700 dark:hover:bg-yellow-600 dark:text-gray-100">
-                        <Pencil className="w-4 h-4 mr-1" /> Editar
-                      </button>
-                      <button onClick={() => confirmDelete(product)} // Llama a confirmDelete
-                              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75 transition duration-300 transform hover:scale-105 flex items-center justify-center
-                                         dark:bg-red-700 dark:hover:bg-red-600 dark:text-gray-100">
-                        <Trash2 className="w-4 h-4 mr-1" /> Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-gray-600 text-center py-6 mt-4 dark:text-gray-300">No hay productos registrados. Agrega uno nuevo.</p>
+        </h2>
+
+        {/* Filtro de Categorías para la tabla */}
+        <div className="mb-6 flex flex-wrap gap-2">
+          {categories.map(category => (
+            <button
+              key={category.ID || 'all'}
+              onClick={() => setSelectedCategory(category.ID)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 ${
+                selectedCategory === category.ID
+                  ? 'bg-purple-600 text-white shadow-md dark:bg-purple-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              {category.NAME}
+            </button>
+          ))}
+        </div>
+
+        {/* DataTable de Productos */}
+        <DataTable
+          data={currentProducts}
+          headers={tableHeaders}
+          keyAccessor="ID" // Usar la clave mapeada para el keyAccessor
+          tableColorTheme="purple"
+          // Renderiza la última columna para las acciones de editar/eliminar
+          renderCustomColumn={(row, header) => {
+            if (header === '') { // Usamos el encabezado vacío para esta columna
+              return (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleEdit(row)}
+                    className="p-2 rounded-full bg-yellow-500 hover:bg-yellow-600 text-white shadow-md transition-colors duration-200"
+                    title="Editar"
+                  >
+                    <Edit className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => confirmDeleteProduct(row['ID'])} // Llama al nuevo handler del modal usando la clave mapeada
+                    className="p-2 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-md transition-colors duration-200"
+                    title="Eliminar"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              );
+            }
+            return undefined;
+          }}
+        />
+        {currentProducts.length === 0 && !loading && !error && (
+          <p className="text-center text-gray-600 dark:text-gray-300 mt-4">No hay productos disponibles en esta categoría o para el filtro actual.</p>
         )}
       </div>
     </div>
